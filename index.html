@@ -4,10 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stable AR Viewer</title>
-    <!-- Three.js & WebXR -->
+    <!-- Three.js & WebXR - Use full paths and add integrity checks -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/webxr/ARButton.js"></script>
+    <!-- Import modules properly for better compatibility -->
+    <script type="module">
+        // Import modules directly to avoid "not defined" errors
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js';
+        import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js';
+        import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/webxr/ARButton.js';
+        
+        // Make them available globally
+        window.THREE = THREE;
+        window.GLTFLoader = GLTFLoader;
+        window.ARButton = ARButton;
+        
+        // Signal that modules are loaded
+        window.modulesLoaded = true;
+        
+        // Dispatch event when modules are ready
+        window.dispatchEvent(new Event('threejsModulesLoaded'));
+    </script>
     <style>
         body {
             margin: 0;
@@ -269,7 +285,7 @@
             <button class="ar-button" id="place-model">📍</button>
             <button class="ar-button" id="rotate-right">⟳</button>
         </div>
-        <div id="debug-info" class="debug-info hidden"></div>
+        <div id="debug-info" class="debug-info">Debug info will appear here</div>
     </div>
 
     <div class="model-selector">
@@ -278,6 +294,34 @@
     </div>
     
     <script>
+    // Debug mode
+    const DEBUG = true;
+    
+    // Global variables
+    let scene, camera, renderer, controller, reticle, model, currentModelName;
+    let placed = false;
+    let usingFallbackMode = false;
+    let gyroAvailable = false;
+    let deviceOrientationControls = null;
+    let modelRotationY = 0;
+    let videoElement;
+    let modelLoaded = false;
+    let cameraInitialized = false;
+    let initializationTimeout;
+    let loadingTimeoutDuration = 15000; // 15 seconds timeout
+
+    // Debug logging
+    function debugLog(message) {
+        if (DEBUG) {
+            console.log(`[AR Debug] ${message}`);
+            const debugElement = document.getElementById('debug-info');
+            if (debugElement) {
+                debugElement.classList.remove('hidden');
+                debugElement.textContent = message;
+            }
+        }
+    }
+
     // --- Model configs (relative paths for GitHub Pages) ---
     const MODEL_CONFIGS = {
         array: {
@@ -332,35 +376,8 @@
         }
     };
 
-    // Debug mode
-    const DEBUG = true;
-    
-    // Global variables
-    let scene, camera, renderer, controller, reticle, model, currentModelName;
-    let placed = false;
-    let usingFallbackMode = false;
-    let gyroAvailable = false;
-    let deviceOrientationControls = null;
-    let modelRotationY = 0;
-    let videoElement;
-    let modelLoaded = false;
-    let cameraInitialized = false;
-    let initializationTimeout;
-    let loadingTimeoutDuration = 15000; // 15 seconds timeout
-
-    // Debug logging
-    function debugLog(message) {
-        if (DEBUG) {
-            console.log(`[AR Debug] ${message}`);
-            const debugElement = document.getElementById('debug-info');
-            if (debugElement) {
-                debugElement.classList.remove('hidden');
-                debugElement.textContent = message;
-            }
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', async function() {
+    // Wait for modules to load before initializing
+    function initApp() {
         debugLog("DOM loaded, initializing app");
         
         // Set up retry button
@@ -435,7 +452,21 @@
                 model.rotation.y = modelRotationY;
             }
         });
-    });
+
+        // Set up model selector
+        const modelKeys = Object.keys(MODEL_CONFIGS);
+        let currentModelIndex = modelKeys.indexOf(currentModelName);
+
+        document.getElementById('prev-model').addEventListener('click', () => {
+            currentModelIndex = (currentModelIndex - 1 + modelKeys.length) % modelKeys.length;
+            loadNewModel(modelKeys[currentModelIndex]);
+        });
+
+        document.getElementById('next-model').addEventListener('click', () => {
+            currentModelIndex = (currentModelIndex + 1) % modelKeys.length;
+            loadNewModel(modelKeys[currentModelIndex]);
+        });
+    }
 
     function showError(msg, details = "") {
         debugLog("Error: " + msg);
@@ -461,102 +492,118 @@
     function initWebXR(modelData) {
         debugLog("Initializing WebXR");
         
-        // Setup Three.js scene
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, canvas: document.getElementById('ar-canvas') });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.xr.enabled = true;
-
-        // Lighting
-        scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
-        const light = new THREE.DirectionalLight(0xffffff, 0.8);
-        light.position.set(1, 2, 3);
-        scene.add(light);
-
-        // Reticle for placement
-        reticle = new THREE.Mesh(
-            new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2),
-            new THREE.MeshBasicMaterial({ color: 0x00ffff })
-        );
-        reticle.matrixAutoUpdate = false;
-        reticle.visible = false;
-        scene.add(reticle);
-
-        // ARButton
         try {
-            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
-        } catch (e) {
-            debugLog("Error creating AR button: " + e.message);
-            showError("Failed to initialize AR", e.message);
-            return;
-        }
+            // Check if THREE is available
+            if (!window.THREE) {
+                throw new Error("THREE.js not loaded");
+            }
+            
+            // Setup Three.js scene
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-        // Controller for hit test
-        controller = renderer.xr.getController(0);
-        controller.addEventListener('select', onSelect);
-        scene.add(controller);
-
-        // Load model (but don't add to scene yet)
-        loadModel(modelData.model);
-
-        // Animation loop
-        renderer.setAnimationLoop(render);
-
-        // Handle resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, canvas: document.getElementById('ar-canvas') });
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+            renderer.xr.enabled = true;
 
-        // Hit test source
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
+            // Lighting
+            scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+            const light = new THREE.DirectionalLight(0xffffff, 0.8);
+            light.position.set(1, 2, 3);
+            scene.add(light);
 
-        function render(timestamp, frame) {
-            if (frame) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const session = renderer.xr.getSession();
+            // Reticle for placement
+            reticle = new THREE.Mesh(
+                new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial({ color: 0x00ffff })
+            );
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
 
-                if (!hitTestSourceRequested) {
-                    session.requestReferenceSpace('viewer').then((refSpace) => {
-                        session.requestHitTestSource({ space: refSpace }).then((source) => {
-                            hitTestSource = source;
+            // Check if ARButton is available
+            if (!window.ARButton) {
+                throw new Error("ARButton not loaded");
+            }
+
+            // ARButton
+            try {
+                document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+            } catch (e) {
+                debugLog("Error creating AR button: " + e.message);
+                throw new Error("Failed to create AR button: " + e.message);
+            }
+
+            // Controller for hit test
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            // Load model (but don't add to scene yet)
+            loadModel(modelData.model);
+
+            // Animation loop
+            renderer.setAnimationLoop(render);
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Hit test source
+            let hitTestSource = null;
+            let hitTestSourceRequested = false;
+
+            function render(timestamp, frame) {
+                if (frame) {
+                    const referenceSpace = renderer.xr.getReferenceSpace();
+                    const session = renderer.xr.getSession();
+
+                    if (!hitTestSourceRequested) {
+                        session.requestReferenceSpace('viewer').then((refSpace) => {
+                            session.requestHitTestSource({ space: refSpace }).then((source) => {
+                                hitTestSource = source;
+                            });
                         });
-                    });
-                    session.addEventListener('end', () => {
-                        hitTestSourceRequested = false;
-                        hitTestSource = null;
-                    });
-                    hitTestSourceRequested = true;
-                }
+                        session.addEventListener('end', () => {
+                            hitTestSourceRequested = false;
+                            hitTestSource = null;
+                        });
+                        hitTestSourceRequested = true;
+                    }
 
-                if (hitTestSource) {
-                    const hitTestResults = frame.getHitTestResults(hitTestSource);
-                    if (hitTestResults.length > 0 && !placed) {
-                        const hit = hitTestResults[0];
-                        const pose = hit.getPose(referenceSpace);
-                        reticle.visible = true;
-                        reticle.matrix.fromArray(pose.transform.matrix);
-                    } else {
-                        reticle.visible = false;
+                    if (hitTestSource) {
+                        const hitTestResults = frame.getHitTestResults(hitTestSource);
+                        if (hitTestResults.length > 0 && !placed) {
+                            const hit = hitTestResults[0];
+                            const pose = hit.getPose(referenceSpace);
+                            reticle.visible = true;
+                            reticle.matrix.fromArray(pose.transform.matrix);
+                        } else {
+                            reticle.visible = false;
+                        }
                     }
                 }
+
+                renderer.render(scene, camera);
             }
 
-            renderer.render(scene, camera);
-        }
-
-        function onSelect() {
-            if (reticle.visible && model && !placed) {
-                model.position.setFromMatrixPosition(reticle.matrix);
-                model.visible = true;
-                placed = true;
-                reticle.visible = false;
-                document.getElementById('ar-instructions').classList.add('hidden');
+            function onSelect() {
+                if (reticle.visible && model && !placed) {
+                    model.position.setFromMatrixPosition(reticle.matrix);
+                    model.visible = true;
+                    placed = true;
+                    reticle.visible = false;
+                    document.getElementById('ar-instructions').classList.add('hidden');
+                }
             }
+        } catch (error) {
+            debugLog("Error in initWebXR: " + error.message);
+            showError("Failed to initialize AR", error.message);
+            // Try fallback mode instead
+            initFallbackAR(modelData);
         }
     }
 
@@ -566,54 +613,79 @@
         document.getElementById('fallback-notice').classList.remove('hidden');
         document.getElementById('ar-instructions').textContent = '📱 Tap the place button to position the model';
         
-        // Setup Three.js scene
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
-        camera.position.z = 5;
-
-        renderer = new THREE.WebGLRenderer({ 
-            antialias: true, 
-            alpha: true, 
-            canvas: document.getElementById('ar-canvas') 
-        });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0x000000, 0); // Transparent background
-
-        // Lighting
-        scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
-        const light = new THREE.DirectionalLight(0xffffff, 0.8);
-        light.position.set(1, 2, 3);
-        scene.add(light);
-
-        // Load model
-        loadModel(modelData.model);
-
-        // Initialize camera stream as background
-        initCameraStream();
-
-        // Check for device orientation support
-        checkDeviceOrientation();
-
-        // Animation loop
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            // Apply device orientation if available
-            if (gyroAvailable && placed) {
-                // The model will be updated by the device orientation controls
+        try {
+            // Check if THREE is available
+            if (!window.THREE) {
+                throw new Error("THREE.js not loaded");
             }
             
-            renderer.render(scene, camera);
-        }
-        
-        animate();
+            // Setup Three.js scene
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 1000);
+            camera.position.z = 5;
 
-        // Handle resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                alpha: true, 
+                canvas: document.getElementById('ar-canvas') 
+            });
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+            renderer.setClearColor(0x000000, 0); // Transparent background
+
+            // Lighting
+            scene.add(new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1));
+            const light = new THREE.DirectionalLight(0xffffff, 0.8);
+            light.position.set(1, 2, 3);
+            scene.add(light);
+
+            // Add a simple cube to test rendering
+            const testCube = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 0.2, 0.2),
+                new THREE.MeshStandardMaterial({ color: 0xff0000 })
+            );
+            testCube.position.set(0, 0, -2);
+            scene.add(testCube);
+            debugLog("Added test cube to scene");
+
+            // Load model
+            loadModel(modelData.model);
+
+            // Initialize camera stream as background
+            initCameraStream();
+
+            // Check for device orientation support
+            checkDeviceOrientation();
+
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Rotate test cube to verify rendering is working
+                if (testCube) {
+                    testCube.rotation.x += 0.01;
+                    testCube.rotation.y += 0.01;
+                }
+                
+                // Apply device orientation if available
+                if (gyroAvailable && placed && model) {
+                    // The model will be updated by the device orientation controls
+                }
+                
+                renderer.render(scene, camera);
+            }
+            
+            animate();
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        } catch (error) {
+            debugLog("Error in initFallbackAR: " + error.message);
+            showError("Failed to initialize fallback AR", error.message);
+        }
     }
 
     function loadModel(modelPath) {
@@ -634,7 +706,12 @@
         
         // Try to load the actual model
         try {
-            const loader = new THREE.GLTFLoader();
+            // Check if GLTFLoader is available
+            if (!window.GLTFLoader) {
+                throw new Error("GLTFLoader not loaded");
+            }
+            
+            const loader = new GLTFLoader();
             
             // Add timeout for model loading
             const modelLoadTimeout = setTimeout(() => {
@@ -856,19 +933,6 @@
         }
     }
 
-    const modelKeys = Object.keys(MODEL_CONFIGS);
-    let currentModelIndex = modelKeys.indexOf(currentModelName);
-
-    document.getElementById('prev-model').addEventListener('click', () => {
-        currentModelIndex = (currentModelIndex - 1 + modelKeys.length) % modelKeys.length;
-        loadNewModel(modelKeys[currentModelIndex]);
-    });
-
-    document.getElementById('next-model').addEventListener('click', () => {
-        currentModelIndex = (currentModelIndex + 1) % modelKeys.length;
-        loadNewModel(modelKeys[currentModelIndex]);
-    });
-
     function loadNewModel(modelName) {
         // Remove current model
         if (model) {
@@ -877,14 +941,45 @@
         }
 
         placed = false;
+        modelLoaded = false;
         currentModelName = modelName;
         const modelData = MODEL_CONFIGS[modelName];
 
         document.getElementById('model-title').textContent = modelData.title;
         document.getElementById('model-subtitle').textContent = modelData.subtitle;
 
+        // Show loading screen again
+        document.getElementById('loading').classList.remove('hidden');
+        updateProgress(0, "Loading new model...");
+
         loadModel(modelData.model);
     }
+
+    // Check if modules are already loaded
+    if (window.modulesLoaded) {
+        initApp();
+    } else {
+        // Wait for modules to load
+        window.addEventListener('threejsModulesLoaded', initApp);
+        
+        // Set a timeout in case modules don't load
+        setTimeout(() => {
+            if (!window.modulesLoaded) {
+                showError("Failed to load required modules", "Please check your internet connection and try again.");
+            }
+        }, 10000);
+    }
+
+    // Initialize on DOM load as a fallback
+    document.addEventListener('DOMContentLoaded', function() {
+        // Only initialize if not already done
+        if (!scene && !initializationTimeout) {
+            debugLog("DOM loaded, checking if modules are loaded");
+            if (window.modulesLoaded) {
+                initApp();
+            }
+        }
+    });
     </script>
 </body>
 </html>
