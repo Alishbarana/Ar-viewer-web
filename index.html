@@ -10,6 +10,8 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/loaders/DRACOLoader.js"></script>
     
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+
     <style>
         * {
             margin: 0;
@@ -814,6 +816,16 @@
         
         async function initializeApp() {
             try {
+                // Log the current URL for debugging
+                console.log('Current URL:', window.location.href);
+                console.log('Protocol:', window.location.protocol);
+                
+                // Ensure we're using HTTPS (required for WebXR)
+                if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                    showError('WebXR requires HTTPS. Please access this page via HTTPS.');
+                    return;
+                }
+                
                 updateProgress(10, 'Checking WebXR support...');
                 
                 // Check if WebXR is available
@@ -1068,12 +1080,16 @@
                     },
                     (progress) => {
                         const percent = Math.min(80, 50 + (progress.loaded / progress.total) * 30);
-                        updateProgress(percent, 'Loading model...');
+                        updateProgress(percent, `Loading model... ${Math.round(percent)}%`);
                     },
                     (error) => {
                         console.error('Error loading model:', error);
+                        console.log('Attempting to load from:', modelData.model);
+                        
+                        // Show more specific error message
+                        updateProgress(70, 'Model load failed, creating fallback...');
                         createFallbackModel();
-                        resolve(); // Resolve anyway with fallback
+                        resolve();
                     }
                 );
             });
@@ -1167,7 +1183,7 @@
                     modelRotation.y += rotateStep;
                     break;
                 case 'right':
-                    modelRotation.y -= rotateStep;
+                    modelRotation.y += rotateStep;
                     break;
             }
             
