@@ -108,26 +108,39 @@
         document.getElementById('model-title').textContent = modelData.title;
         document.getElementById('model-subtitle').textContent = modelData.subtitle;
 
-        // Check WebXR support
-        if (navigator.xr && navigator.xr.isSessionSupported) {
-            navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-                if (supported) {
-                    initWebXR(modelData);
-                } else {
-                    showError("WebXR AR not supported on this device/browser.");
-                }
-            });
-        } else {
-            showError("WebXR AR not supported on this device/browser.");
+        // Check WebXR support with robust error handling
+        try {
+            if (navigator.xr && typeof navigator.xr.isSessionSupported === 'function') {
+                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                    if (supported) {
+                        initWebXR(modelData);
+                    } else {
+                        showError("WebXR AR is not supported on this device or browser.");
+                    }
+                }).catch((err) => {
+                    console.error("Error checking WebXR support:", err);
+                    showError("An error occurred while checking AR support.");
+                });
+            } else {
+                showError("WebXR AR is not supported on this device or browser.");
+            }
+        } catch (e) {
+            console.error("Exception during AR support check:", e);
+            showError("An unexpected error occurred while checking AR support.");
         }
     });
 
     function showError(msg) {
+        // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
+        // Show error message
         const errorDiv = document.getElementById('error');
         if (errorDiv) {
             errorDiv.querySelector('div').textContent = msg;
             errorDiv.classList.remove('hidden');
+        } else {
+            // Fallback: alert if error div is missing
+            alert(msg);
         }
     }
 
@@ -175,11 +188,11 @@
                 document.getElementById('loading').classList.add('hidden');
             },
             (xhr) => {
-                // Progress
                 const percent = xhr.loaded / (xhr.total || 1) * 100;
                 updateProgress(percent, "Loading 3D model...");
             },
             (err) => {
+                console.error("GLTF Load Error:", err);
                 showError("Failed to load model.");
             }
         );
