@@ -1,429 +1,44 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <title>WebXR AR Viewer - Educational Models</title>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>WebXR AR Viewer</title>
     
-    <!-- Three.js for 3D rendering -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/examples/js/loaders/DRACOLoader.js"></script>
-    
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
         body {
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            background: #000;
-            touch-action: none;
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: Monospace;
+            font-size: 13px;
+            line-height: 24px;
+            overscroll-behavior: none;
         }
-        
-        #ar-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
+
+        #info {
+            position: absolute;
+            top: 10px;
             width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 10;
-        }
-        
-        .ar-header {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            right: 20px;
+            text-align: center;
+            z-index: 100;
+            display: block;
             background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            backdrop-filter: blur(10px);
-            pointer-events: auto;
-            z-index: 11;
-        }
-        
-        .ar-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .ar-subtitle {
-            font-size: 14px;
-            opacity: 0.8;
-        }
-        
-        /* Horizontal scrollable bottom controls */
-        .ar-controls-container {
-            position: fixed;
-            bottom: 20px;
-            left: 0;
-            right: 0;
-            z-index: 11;
-            pointer-events: none;
-            display: flex;
-            justify-content: center;
-        }
-        
-        .ar-controls {
-            display: flex;
-            gap: 8px;
-            padding: 0 20px;
-            overflow-x: auto;
-            pointer-events: auto;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-            max-width: 100%;
-        }
-        
-        .ar-controls::-webkit-scrollbar {
-            display: none;
-        }
-        
-        .ar-button {
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            border: none;
-            padding: 12px 16px;
-            border-radius: 50px;
-            font-size: 14px;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            min-width: 60px;
-            flex-shrink: 0;
-            touch-action: manipulation;
-            user-select: none;
-        }
-        
-        .ar-button:hover {
-            background: rgba(0, 0, 0, 0.9);
-        }
-        
-        .ar-button:active {
-            transform: scale(0.95);
-        }
-        
-        /* Horizontal game-style rotation controls */
-        .rotation-controls {
-            position: fixed;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            pointer-events: auto;
-            z-index: 11;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px 20px;
-            border-radius: 25px;
-            backdrop-filter: blur(10px);
-        }
-        
-        .rotation-button {
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(30, 30, 30, 0.8));
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 10px;
-            border-radius: 50%;
-            font-size: 16px;
-            cursor: pointer;
-            backdrop-filter: blur(15px);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            touch-action: manipulation;
-            user-select: none;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        }
-        
-        .rotation-button:hover {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        .rotation-button:active {
-            transform: scale(0.95);
-        }
-        
-        /* AR Movement Controls */
-        .ar-movement-controls {
-            position: fixed;
-            top: 50%;
-            right: 20px;
-            transform: translateY(-50%);
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: auto;
-            z-index: 11;
-        }
-        
-        .movement-button {
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 12px;
-            border-radius: 50%;
-            font-size: 14px;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            touch-action: manipulation;
-            user-select: none;
-            transition: all 0.3s ease;
-        }
-        
-        .movement-button:hover {
-            background: rgba(102, 126, 234, 0.8);
-        }
-        
-        .ar-instructions {
-            position: fixed;
-            bottom: 180px;
-            left: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            text-align: center;
-            font-size: 14px;
-            backdrop-filter: blur(10px);
-            pointer-events: auto;
-            z-index: 11;
-            opacity: 1;
-            transition: opacity 0.5s ease;
-        }
-        
-        .ar-instructions.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        
-        .loading {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            z-index: 12;
-        }
-        
-        .error {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(255, 0, 0, 0.9);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            z-index: 12;
-        }
-        
-        .hidden {
-            display: none;
-        }
-
-        /* Model Information Overlay */
-        .model-info-panel {
-            position: fixed;
-            left: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 280px;
-            max-height: 50vh;
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(30, 30, 30, 0.8));
-            color: white;
-            padding: 20px;
-            border-radius: 15px;
-            backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            pointer-events: auto;
-            z-index: 11;
-            overflow-y: auto;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
-        .model-info-panel.hidden {
-            transform: translateY(-50%) translateX(-320px);
-            opacity: 0;
-        }
-
-        .info-section {
-            margin-bottom: 15px;
-        }
-
-        .info-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .info-content {
-            font-size: 14px;
-            line-height: 1.4;
-            opacity: 0.9;
-        }
-
-        .hotspot-list {
-            list-style: none;
-            padding: 0;
-        }
-
-        .hotspot-item {
-            background: rgba(255, 255, 255, 0.1);
-            margin: 5px 0;
-            padding: 8px 12px;
-            border-radius: 8px;
-            border-left: 3px solid #667eea;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .hotspot-item:hover {
-            background: rgba(102, 126, 234, 0.2);
-            transform: translateX(5px);
-        }
-
-        /* Enhanced Progress Bar */
-        .progress-container {
-            width: 100%;
-            margin-top: 15px;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            transition: width 0.3s ease;
-            border-radius: 3px;
-        }
-
-        .progress-text {
-            font-size: 12px;
-            margin-top: 5px;
-            text-align: center;
-            opacity: 0.8;
-        }
-
-        /* Touch Gesture Hints */
-        .gesture-hints {
-            position: fixed;
-            top: 100px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            font-size: 12px;
-            backdrop-filter: blur(10px);
-            z-index: 11;
-            max-width: 200px;
-            transition: opacity 0.5s ease;
-        }
-
-        .gesture-hints.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        /* Enhanced AR Button Styles */
-        .ar-button.enhanced {
-            background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(30, 30, 30, 0.8));
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
-        }
-
-        .ar-button.enhanced:hover {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        /* AR Entry Button */
-        #enter-ar {
-            position: fixed;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 50px;
-            font-size: 18px;
-            font-weight: bold;
-            cursor: pointer;
-            z-index: 9;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
-        }
-
-        #enter-ar:hover {
-            transform: translateX(-50%) translateY(-2px);
-            box-shadow: 0 6px 25px rgba(102, 126, 234, 0.7);
-        }
-
-        #enter-ar:active {
-            transform: translateX(-50%) translateY(0);
+            border-radius: 5px;
+            margin: 0 10px;
+            box-sizing: border-box;
         }
 
         #model-selector {
-            position: fixed;
-            top: 20px;
+            position: absolute;
+            top: 60px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.7);
-            color: white;
             padding: 10px;
-            border-radius: 10px;
-            z-index: 9;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            z-index: 100;
         }
 
         #model-selector select {
@@ -440,91 +55,92 @@
             background: #222;
         }
 
-        #webxr-not-supported {
-            position: fixed;
-            top: 50%;
+        /* AR Controls */
+        .ar-controls {
+            position: absolute;
+            bottom: 20px;
             left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            max-width: 80%;
+            transform: translateX(-50%);
+            display: none;
+            flex-direction: row;
+            gap: 10px;
             z-index: 100;
         }
 
-        #webxr-not-supported h2 {
-            color: #ff4757;
-            margin-bottom: 15px;
+        .ar-controls.active {
+            display: flex;
         }
 
-        #webxr-not-supported p {
-            margin-bottom: 10px;
-            line-height: 1.5;
+        .ar-button {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            min-width: 60px;
+            text-align: center;
         }
 
-        #webxr-not-supported ul {
-            text-align: left;
-            margin: 15px 0;
-            padding-left: 20px;
+        .ar-button:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
-        #webxr-not-supported li {
-            margin-bottom: 5px;
+        .ar-button:active {
+            transform: scale(0.95);
         }
 
-        #webxr-not-supported a {
-            color: #70a1ff;
-        }
-
-        #reticle {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            border: 2px solid white;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 11;
-            pointer-events: none;
+        /* Model Info Panel */
+        .model-info {
+            position: absolute;
+            left: 10px;
+            top: 120px;
+            width: 280px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
             display: none;
+        }
+
+        .model-info.active {
+            display: block;
+        }
+
+        .model-info h3 {
+            margin: 0 0 10px 0;
+            color: #4CAF50;
+        }
+
+        .model-info p {
+            margin: 5px 0;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        /* Instructions */
+        .instructions {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-align: center;
+            z-index: 100;
+            font-size: 12px;
+            max-width: 80%;
         }
     </style>
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loading" class="loading">
-        <div>Initializing WebXR...</div>
-        <div class="progress-container">
-            <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill"></div>
-            </div>
-            <div class="progress-text" id="progress-text">Checking WebXR compatibility...</div>
-        </div>
+    <div id="info">
+        <span id="model-title">WebXR AR Educational Viewer</span><br/>
+        <span id="model-subtitle">Select a model and enter AR to place it in your space</span>
     </div>
-    
-    <!-- Error Screen -->
-    <div id="error" class="error hidden">
-        <div>WebXR Error</div>
-        <div style="margin-top: 10px; font-size: 12px;">Could not initialize WebXR</div>
-    </div>
-    
-    <!-- WebXR Not Supported Message -->
-    <div id="webxr-not-supported" class="hidden">
-        <h2>WebXR Not Supported</h2>
-        <p>Your browser or device doesn't support WebXR Augmented Reality.</p>
-        <p>To use this feature, you need:</p>
-        <ul>
-            <li>A compatible AR device (modern Android or iOS device)</li>
-            <li>A WebXR-compatible browser (Chrome, Edge, or Safari)</li>
-        </ul>
-        <p>Try opening this page in Chrome on Android or Safari on iOS 13+.</p>
-        <p><a href="https://developer.mozilla.org/en-US/docs/Web/API/WebXR_Device_API#browser_compatibility" target="_blank">Learn more about WebXR compatibility</a></p>
-    </div>
-    
-    <!-- Model Selector (Pre-AR) -->
+
     <div id="model-selector">
         <select id="model-select">
             <option value="array">Array Data Structure</option>
@@ -539,837 +155,361 @@
             <option value="router">Network Router</option>
         </select>
     </div>
-    
-    <!-- AR Entry Button -->
-    <button id="enter-ar">
-        <span>🥽</span>
-        <span>Enter AR</span>
-    </button>
-    
-    <!-- Reticle for placement -->
-    <div id="reticle"></div>
-    
-    <!-- AR Overlay (Only visible in AR mode) -->
-    <div id="ar-overlay" class="hidden">
-        <!-- Header Info -->
-        <div class="ar-header">
-            <div class="ar-title" id="model-title">Loading...</div>
-            <div class="ar-subtitle" id="model-subtitle">Move around the model with directional controls</div>
-        </div>
-        
-        <!-- Instructions -->
-        <div id="ar-instructions" class="ar-instructions">
-            📱 Tap on a surface to place the model
-        </div>
 
-        <!-- Model Information Panel -->
-        <div class="model-info-panel hidden" id="info-panel">
-            <div class="info-section">
-                <div class="info-title">
-                    <span>📋</span>
-                    <span>Model Overview</span>
-                </div>
-                <div class="info-content" id="overview-content">
-                    Select a model to see detailed information about its structure and functionality.
-                </div>
-            </div>
-            
-            <div class="info-section">
-                <div class="info-title">
-                    <span>🔧</span>
-                    <span>Key Components</span>
-                </div>
-                <ul class="hotspot-list" id="components-list">
-                    <li class="hotspot-item">Loading components...</li>
-                </ul>
-            </div>
-            
-            <div class="info-section">
-                <div class="info-title">
-                    <span>⚡</span>
-                    <span>Performance</span>
-                </div>
-                <div class="info-content" id="performance-content">
-                    Optimized for smooth AR experience
-                </div>
-            </div>
-        </div>
-
-        <!-- Touch Gesture Hints -->
-        <div class="gesture-hints" id="gesture-hints">
-            <div><strong>AR Controls:</strong></div>
-            <div>• Use directional buttons to move</div>
-            <div>• Drag to manually rotate</div>
-            <div>• Double tap to reset</div>
-        </div>
-
-        <!-- AR Movement Controls -->
-        <div class="ar-movement-controls">
-            <button class="movement-button" id="move-up">
-                ⬆️
-            </button>
-            <button class="movement-button" id="move-left">
-                ⬅️
-            </button>
-            <button class="movement-button" id="move-right">
-                ➡️
-            </button>
-            <button class="movement-button" id="move-down">
-                ⬇️
-            </button>
-        </div>
-        
-        <!-- Horizontal Game-style Rotation Controls -->
-        <div class="rotation-controls">
-            <button class="rotation-button" id="rotate-left">
-                ↺
-            </button>
-            <button class="rotation-button" id="rotate-up">
-                ⬆️
-            </button>
-            <button class="rotation-button" id="rotate-down">
-                ⬇️
-            </button>
-            <button class="rotation-button" id="rotate-right">
-                ↻
-            </button>
-        </div>
-        
-        <!-- Horizontal Scrollable Bottom Controls -->
-        <div class="ar-controls-container">
-            <div class="ar-controls">
-                <button class="ar-button enhanced" id="reset-button">
-                    <span>🔄</span>
-                    <span>Reset</span>
-                </button>
-                <button class="ar-button enhanced" id="near-button">
-                    <span>🔍</span>
-                    <span>Near</span>
-                </button>
-                <button class="ar-button enhanced" id="far-button">
-                    <span>🔭</span>
-                    <span>Far</span>
-                </button>
-                <button class="ar-button enhanced" id="info-button">
-                    <span>📋</span>
-                    <span>Info</span>
-                </button>
-                <button class="ar-button enhanced" id="capture-button">
-                    <span>📸</span>
-                    <span>Capture</span>
-                </button>
-                <button class="ar-button enhanced" id="exit-button">
-                    <span>❌</span>
-                    <span>Exit</span>
-                </button>
-            </div>
-        </div>
+    <div class="ar-controls" id="ar-controls">
+        <button class="ar-button" onclick="resetModel()">🔄 Reset</button>
+        <button class="ar-button" onclick="scaleUp()">🔍 Bigger</button>
+        <button class="ar-button" onclick="scaleDown()">🔭 Smaller</button>
+        <button class="ar-button" onclick="toggleInfo()">📋 Info</button>
+        <button class="ar-button" onclick="rotateModel()">↻ Rotate</button>
     </div>
 
-    <script>
-        // Global variables
-        let scene, camera, renderer, model;
-        let xrSession = null;
-        let xrReferenceSpace = null;
-        let xrHitTestSource = null;
-        let modelData = {};
-        let isModelPlaced = false;
-        let modelRoot = null;
-        let currentSize = 1;
-        let modelOffset = { x: 0, y: 0, z: 0 };
-        let modelRotation = { x: 0, y: 0, z: 0 };
-        let reticle;
-        let controller;
-        
-        // Enhanced model data with detailed information
-        const ENHANCED_MODEL_DATA = {
-            array: {
-                overview: "Arrays are fundamental linear data structures that store elements in contiguous memory locations. They provide O(1) random access through indexing and are the building blocks for many other data structures.",
-                components: ["Index-based Access", "Contiguous Memory Layout", "Fixed Size Allocation", "Homogeneous Elements", "Cache-Friendly Design"],
-                performance: "Access: O(1), Search: O(n), Insert/Delete: O(n)",
-                useCases: "Database records, image processing, mathematical computations, buffer implementations"
-            },
-            binary_tree: {
-                overview: "Binary trees are hierarchical data structures where each node has at most two children. They form the foundation for efficient searching, sorting, and hierarchical data organization.",
-                components: ["Root Node", "Parent-Child Relationships", "Left/Right Subtrees", "Leaf Nodes", "Tree Traversal Methods"],
-                performance: "Search: O(log n), Insert: O(log n), Delete: O(log n)",
-                useCases: "File systems, expression parsing, decision trees, database indexing"
-            },
-            linked_list: {
-                overview: "Linked lists are dynamic linear data structures where elements (nodes) are connected through pointers. They allow efficient insertion and deletion at any position.",
-                components: ["Node Structure", "Pointer References", "Head/Tail Pointers", "Dynamic Memory", "Sequential Access"],
-                performance: "Access: O(n), Search: O(n), Insert: O(1), Delete: O(1)",
-                useCases: "Dynamic memory allocation, undo functionality, music playlists, browser history"
-            },
-            stack: {
-                overview: "Stacks follow the Last-In-First-Out (LIFO) principle. Elements are added and removed from the same end, making them perfect for managing function calls and temporary data.",
-                components: ["Top Pointer", "LIFO Operations", "Push/Pop Methods", "Stack Frame", "Overflow Protection"],
-                performance: "Push: O(1), Pop: O(1), Peek: O(1), Search: O(n)",
-                useCases: "Function call management, expression evaluation, undo operations, browser back button"
-            },
-            queue: {
-                overview: "Queues implement the First-In-First-Out (FIFO) principle. Elements are added at the rear and removed from the front, ideal for scheduling and buffering.",
-                components: ["Front/Rear Pointers", "FIFO Operations", "Enqueue/Dequeue", "Circular Implementation", "Buffer Management"],
-                performance: "Enqueue: O(1), Dequeue: O(1), Front: O(1), Search: O(n)",
-                useCases: "Task scheduling, print queues, breadth-first search, CPU scheduling"
-            },
-            merge_sort: {
-                overview: "Merge Sort is a divide-and-conquer algorithm that recursively divides the array into halves, sorts them, and merges them back together in sorted order.",
-                components: ["Divide Phase", "Conquer Phase", "Merge Operation", "Recursive Structure", "Stable Sorting"],
-                performance: "Time: O(n log n), Space: O(n), Stable: Yes",
-                useCases: "Large dataset sorting, external sorting, stable sorting requirements, parallel processing"
-            },
-            osi_model: {
-                overview: "The OSI (Open Systems Interconnection) model is a conceptual framework that standardizes network communication into seven distinct layers.",
-                components: ["Physical Layer", "Data Link Layer", "Network Layer", "Transport Layer", "Session Layer", "Presentation Layer", "Application Layer"],
-                performance: "Standardized communication, protocol independence, modular design",
-                useCases: "Network troubleshooting, protocol development, network education, system design"
-            },
-            client_server: {
-                overview: "Client-Server architecture is a distributed computing model where clients request services from centralized servers, enabling scalable and manageable systems.",
-                components: ["Client Applications", "Server Infrastructure", "Request/Response Cycle", "Load Balancing", "Database Integration"],
-                performance: "Scalable, centralized management, resource sharing, fault tolerance",
-                useCases: "Web applications, database systems, email services, file sharing, enterprise applications"
-            },
-            firewall: {
-                overview: "Firewalls are network security systems that monitor and control incoming and outgoing traffic based on predetermined security rules and policies.",
-                components: ["Packet Filtering", "Stateful Inspection", "Application Gateway", "Rule Engine", "Logging System"],
-                performance: "Real-time filtering, high throughput, minimal latency impact",
-                useCases: "Network perimeter security, internal segmentation, malware protection, compliance enforcement"
-            },
-            router: {
-                overview: "Routers are networking devices that forward data packets between computer networks, determining the best path for data transmission.",
-                components: ["Routing Table", "Packet Forwarding", "Protocol Support", "Interface Management", "Quality of Service"],
-                performance: "High-speed packet processing, dynamic routing, load balancing",
-                useCases: "Internet connectivity, network segmentation, traffic management, VPN connections"
+    <div class="model-info" id="model-info">
+        <h3 id="info-title">Model Information</h3>
+        <p id="info-description">Select a model to see detailed information.</p>
+        <p id="info-complexity"></p>
+        <p id="info-usage"></p>
+    </div>
+
+    <div class="instructions" id="instructions">
+        📱 Point your camera at a flat surface and tap to place the model
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.0/examples/jsm/"
             }
-        };
-        
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { ARButton } from 'three/addons/webxr/ARButton.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+        let camera, scene, renderer;
+        let controller;
+        let reticle;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+        let currentModel = null;
+        let modelData = {};
+        let placedModels = [];
+
         // Model configurations
         const MODEL_CONFIGS = {
             array: {
                 title: "Array Data Structure",
                 subtitle: "Linear collection of elements with indexed access",
                 model: "./models/array.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Arrays store elements in contiguous memory locations with O(1) access time.",
+                complexity: "Access: O(1), Search: O(n), Insert/Delete: O(n)",
+                usage: "Database records, image processing, mathematical computations"
             },
             binary_tree: {
                 title: "Binary Tree",
                 subtitle: "Hierarchical structure with parent-child relationships",
                 model: "./models/binary tree.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Binary trees are hierarchical data structures with at most two children per node.",
+                complexity: "Search: O(log n), Insert: O(log n), Delete: O(log n)",
+                usage: "File systems, expression parsing, decision trees, database indexing"
             },
             linked_list: {
                 title: "Linked List",
                 subtitle: "Sequential nodes connected via pointers",
                 model: "./models/linkedlist.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Dynamic linear data structures where elements are connected through pointers.",
+                complexity: "Access: O(n), Search: O(n), Insert: O(1), Delete: O(1)",
+                usage: "Dynamic memory allocation, undo functionality, music playlists"
             },
             stack: {
                 title: "Stack (LIFO)",
                 subtitle: "Last In First Out data structure",
                 model: "./models/stack.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Stacks follow LIFO principle - last element added is first to be removed.",
+                complexity: "Push: O(1), Pop: O(1), Peek: O(1), Search: O(n)",
+                usage: "Function calls, expression evaluation, undo operations"
             },
             queue: {
                 title: "Queue (FIFO)",
                 subtitle: "First In First Out data structure",
                 model: "./models/queue.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Queues follow FIFO principle - first element added is first to be removed.",
+                complexity: "Enqueue: O(1), Dequeue: O(1), Front: O(1), Search: O(n)",
+                usage: "Task scheduling, print queues, breadth-first search"
             },
             merge_sort: {
                 title: "Merge Sort Algorithm",
                 subtitle: "Divide and conquer sorting technique",
                 model: "./models/mergesort .glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Divide-and-conquer algorithm that recursively sorts array halves.",
+                complexity: "Time: O(n log n), Space: O(n), Stable: Yes",
+                usage: "Large dataset sorting, external sorting, stable sorting requirements"
             },
             osi_model: {
                 title: "OSI Model",
                 subtitle: "7-layer network communication framework",
                 model: "./models/osi model.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Conceptual framework standardizing network communication into seven layers.",
+                complexity: "Standardized communication, protocol independence, modular design",
+                usage: "Network troubleshooting, protocol development, network education"
             },
             client_server: {
                 title: "Client-Server Architecture",
                 subtitle: "Distributed computing model",
                 model: "./models/client-server.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Distributed computing model where clients request services from servers.",
+                complexity: "Scalable, centralized management, resource sharing",
+                usage: "Web applications, database systems, email services"
             },
             firewall: {
                 title: "Network Firewall",
                 subtitle: "Security barrier for network traffic",
                 model: "./models/firewall.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Network security system monitoring and controlling traffic based on rules.",
+                complexity: "Real-time filtering, high throughput, minimal latency",
+                usage: "Network security, internal segmentation, malware protection"
             },
             router: {
                 title: "Network Router",
                 subtitle: "Data packet forwarding device",
                 model: "./models/router.glb",
-                scale: 0.5
+                scale: 0.3,
+                description: "Networking device forwarding data packets between computer networks.",
+                complexity: "High-speed packet processing, dynamic routing, load balancing",
+                usage: "Internet connectivity, network segmentation, traffic management"
             }
         };
-        
-        // Initialize app
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeApp();
-        });
-        
-        async function initializeApp() {
-            try {
-                // Log the current URL for debugging
-                console.log('Current URL:', window.location.href);
-                console.log('Protocol:', window.location.protocol);
-                
-                // Ensure we're using HTTPS (required for WebXR)
-                if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-                    showError('WebXR requires HTTPS. Please access this page via HTTPS.');
-                    return;
-                }
-                
-                updateProgress(10, 'Checking WebXR support...');
-                
-                // Check if WebXR is available
-                if (navigator.xr) {
-                    // Check if AR is supported
-                    const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
-                    
-                    if (isARSupported) {
-                        updateProgress(30, 'WebXR AR supported!');
-                        setupPreARView();
-                    } else {
-                        showWebXRNotSupported("Your browser supports WebXR, but AR mode is not available.");
-                    }
-                } else {
-                    showWebXRNotSupported("WebXR is not supported in this browser.");
-                }
-                
-            } catch (error) {
-                console.error('Error initializing app:', error);
-                showError('Failed to initialize: ' + error.message);
-            }
-        }
-        
-        function setupPreARView() {
-            // Hide loading screen
-            document.getElementById('loading').classList.add('hidden');
-            
-            // Setup enter AR button
-            const enterARButton = document.getElementById('enter-ar');
-            enterARButton.addEventListener('click', startARSession);
-            
+
+        init();
+
+        function init() {
+            const container = document.createElement('div');
+            document.body.appendChild(container);
+
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+            // Lighting setup (same as working example)
+            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3);
+            light.position.set(0.5, 1, 0.25);
+            scene.add(light);
+
+            // Renderer setup (exactly like working example)
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setAnimationLoop(animate);
+            renderer.xr.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // AR Button (same as working example)
+            const arButton = ARButton.createButton(renderer, {
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.body }
+            });
+            document.body.appendChild(arButton);
+
+            // Controller setup (same as working example)
+            controller = renderer.xr.getController(0);
+            controller.addEventListener('select', onSelect);
+            scene.add(controller);
+
+            // Create reticle for placement indication
+            reticle = new THREE.Mesh(
+                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
+                new THREE.MeshBasicMaterial()
+            );
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
             // Setup model selector
             const modelSelect = document.getElementById('model-select');
             modelSelect.addEventListener('change', function() {
                 const selectedModel = modelSelect.value;
                 modelData = MODEL_CONFIGS[selectedModel];
+                updateUI();
             });
-            
+
             // Set initial model data
             modelData = MODEL_CONFIGS[modelSelect.value];
-            
-            updateProgress(100, 'Ready to enter AR!');
-        }
-        
-        async function startARSession() {
-            try {
-                // Show loading screen
-                document.getElementById('loading').classList.remove('hidden');
-                updateProgress(10, 'Starting AR session...');
-                
-                // Initialize Three.js scene
-                initThreeJS();
-                
-                updateProgress(30, 'Requesting AR session...');
-                
-                // Request XR session
-                xrSession = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['hit-test', 'local-floor'],
-                    optionalFeatures: ['dom-overlay'],
-                    domOverlay: { root: document.getElementById('ar-overlay') }
-                });
-                
-                // Setup XR session
-                setupXRSession();
-                
-                // Hide pre-AR UI
-                document.getElementById('enter-ar').style.display = 'none';
-                document.getElementById('model-selector').style.display = 'none';
-                
-                // Show AR UI
-                document.getElementById('ar-overlay').classList.remove('hidden');
-                
-                // Update UI with model info
-                updateUI();
-                
-                // Load the 3D model
-                updateProgress(50, 'Loading 3D model...');
-                await loadModel();
-                
-                // Hide loading screen
-                document.getElementById('loading').classList.add('hidden');
-                
-                // Setup AR controls
-                setupARControls();
-                
-                // Show reticle for placement
-                document.getElementById('reticle').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error starting AR session:', error);
-                showError('Failed to start AR: ' + error.message);
-                
-                // Hide loading screen
-                document.getElementById('loading').classList.add('hidden');
-            }
-        }
-        
-        function initThreeJS() {
-            // Create scene
-            scene = new THREE.Scene();
-            
-            // Create camera (will be updated by WebXR)
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-            
-            // Create renderer
-            renderer = new THREE.WebGLRenderer({
-                antialias: true,
-                alpha: true
-            });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
-            
-            // Create lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(0, 5, 0);
-            scene.add(directionalLight);
-            
-            // Create reticle for placement
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial({ color: 0xffffff })
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-            
-            // Create model root (will hold our model)
-            modelRoot = new THREE.Group();
-            scene.add(modelRoot);
-            
-            // Handle window resize
+            updateUI();
+
+            // Setup AR session events
+            renderer.xr.addEventListener('sessionstart', onSessionStart);
+            renderer.xr.addEventListener('sessionend', onSessionEnd);
+
             window.addEventListener('resize', onWindowResize);
         }
-        
-        function setupXRSession() {
-            // Configure renderer for XR
-            renderer.xr.setReferenceSpaceType('local');
+
+        function onSessionStart() {
+            // Show AR controls
+            document.getElementById('ar-controls').classList.add('active');
             
-            // Set up XR animation loop
-            xrSession.addEventListener('end', onXRSessionEnded);
-            
-            // Create XR reference space
-            xrSession.requestReferenceSpace('local').then((refSpace) => {
-                xrReferenceSpace = refSpace;
-                
-                // Set up hit testing
-                xrSession.requestHitTestSource({ space: xrReferenceSpace }).then((source) => {
-                    xrHitTestSource = source;
+            // Setup hit testing
+            const session = renderer.xr.getSession();
+            session.requestReferenceSpace('viewer').then(function(referenceSpace) {
+                session.requestHitTestSource({ space: referenceSpace }).then(function(source) {
+                    hitTestSource = source;
                 });
-                
-                // Start rendering loop
-                renderer.setAnimationLoop(onXRFrame);
             });
-            
-            // Set up controller for interactions
-            controller = renderer.xr.getController(0);
-            controller.addEventListener('select', onSelect);
-            scene.add(controller);
+
+            session.addEventListener('end', function() {
+                hitTestSourceRequested = false;
+                hitTestSource = null;
+            });
         }
-        
-        function onXRFrame(time, frame) {
-            if (!xrSession || !frame) return;
+
+        function onSessionEnd() {
+            // Hide AR controls
+            document.getElementById('ar-controls').classList.remove('active');
+            document.getElementById('model-info').classList.remove('active');
+        }
+
+        function onSelect() {
+            if (reticle.visible) {
+                // Load and place model at reticle position
+                loadAndPlaceModel();
+            }
+        }
+
+        function loadAndPlaceModel() {
+            const loader = new GLTFLoader();
             
-            const session = frame.session;
-            
-            // Get viewer pose
-            const viewerPose = frame.getViewerPose(xrReferenceSpace);
-            
-            if (viewerPose) {
-                // Handle hit testing if model is not placed yet
-                if (!isModelPlaced && xrHitTestSource) {
-                    const hitTestResults = frame.getHitTestResults(xrHitTestSource);
+            loader.load(
+                modelData.model,
+                function(gltf) {
+                    const model = gltf.scene;
+                    model.scale.setScalar(modelData.scale);
                     
+                    // Position model at reticle location
+                    model.position.setFromMatrixPosition(reticle.matrix);
+                    model.quaternion.setFromRotationMatrix(reticle.matrix);
+                    
+                    // Remove previous model if exists
+                    if (currentModel) {
+                        scene.remove(currentModel);
+                    }
+                    
+                    currentModel = model;
+                    scene.add(model);
+                    placedModels.push(model);
+                    
+                    // Hide instructions
+                    document.getElementById('instructions').style.display = 'none';
+                },
+                function(progress) {
+                    console.log('Loading progress:', progress);
+                },
+                function(error) {
+                    console.error('Error loading model:', error);
+                    // Create fallback model
+                    createFallbackModel();
+                }
+            );
+        }
+
+        function createFallbackModel() {
+            const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+            const material = new THREE.MeshPhongMaterial({ color: 0x9C27B0 });
+            const model = new THREE.Mesh(geometry, material);
+            
+            model.position.setFromMatrixPosition(reticle.matrix);
+            model.quaternion.setFromRotationMatrix(reticle.matrix);
+            
+            if (currentModel) {
+                scene.remove(currentModel);
+            }
+            
+            currentModel = model;
+            scene.add(model);
+            placedModels.push(model);
+            
+            document.getElementById('instructions').style.display = 'none';
+        }
+
+        function animate() {
+            if (renderer.xr.isPresenting) {
+                // Handle hit testing for reticle positioning
+                if (hitTestSource) {
+                    const frame = renderer.xr.getFrame();
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+
                     if (hitTestResults.length > 0) {
                         const hit = hitTestResults[0];
-                        const pose = hit.getPose(xrReferenceSpace);
-                        
-                        // Update reticle position
                         reticle.visible = true;
-                        reticle.matrix.fromArray(pose.transform.matrix);
+                        reticle.matrix.fromArray(hit.getPose(renderer.xr.getReferenceSpace()).transform.matrix);
                     } else {
                         reticle.visible = false;
                     }
                 }
-                
-                // Render the scene
-                renderer.render(scene, camera);
             }
+
+            renderer.render(scene, camera);
         }
-        
-        function onSelect() {
-            if (!isModelPlaced && reticle.visible) {
-                // Place the model at the reticle position
-                modelRoot.position.setFromMatrixPosition(reticle.matrix);
-                modelRoot.visible = true;
-                
-                // Hide reticle and instructions
-                reticle.visible = false;
-                document.getElementById('reticle').style.display = 'none';
-                document.getElementById('ar-instructions').textContent = "Model placed! Use controls to interact.";
-                
-                // Set model as placed
-                isModelPlaced = true;
-                
-                // Hide instructions after 5 seconds
-                setTimeout(() => {
-                    document.getElementById('ar-instructions').classList.add('hidden');
-                }, 5000);
-            }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
-        
-        async function loadModel() {
-            return new Promise((resolve, reject) => {
-                // Create loader
-                const loader = new THREE.GLTFLoader();
-                
-                // Optional: Add DRACO decoder for compressed models
-                const dracoLoader = new THREE.DRACOLoader();
-                dracoLoader.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/');
-                loader.setDRACOLoader(dracoLoader);
-                
-                // Load model
-                loader.load(
-                    modelData.model,
-                    (gltf) => {
-                        model = gltf.scene;
-                        
-                        // Scale model
-                        model.scale.setScalar(modelData.scale);
-                        
-                        // Add model to root
-                        modelRoot.add(model);
-                        
-                        // Hide model until placed
-                        modelRoot.visible = false;
-                        
-                        // Enable shadows
-                        model.traverse((child) => {
-                            if (child.isMesh) {
-                                child.castShadow = true;
-                                child.receiveShadow = true;
-                            }
-                        });
-                        
-                        updateProgress(90, 'Model loaded successfully!');
-                        resolve();
-                    },
-                    (progress) => {
-                        const percent = Math.min(80, 50 + (progress.loaded / progress.total) * 30);
-                        updateProgress(percent, `Loading model... ${Math.round(percent)}%`);
-                    },
-                    (error) => {
-                        console.error('Error loading model:', error);
-                        console.log('Attempting to load from:', modelData.model);
-                        
-                        // Show more specific error message
-                        updateProgress(70, 'Model load failed, creating fallback...');
-                        createFallbackModel();
-                        resolve();
-                    }
-                );
-            });
-        }
-        
-        function createFallbackModel() {
-            // Create a simple geometric shape as fallback
-            const geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-            const material = new THREE.MeshStandardMaterial({ color: 0x9C27B0 });
-            model = new THREE.Mesh(geometry, material);
-            
-            // Add to model root
-            modelRoot.add(model);
-            modelRoot.visible = false;
-            
-            console.warn('Using fallback model');
-        }
-        
-        function setupARControls() {
-            // Movement controls
-            document.getElementById('move-up').addEventListener('click', () => moveModel('up'));
-            document.getElementById('move-down').addEventListener('click', () => moveModel('down'));
-            document.getElementById('move-left').addEventListener('click', () => moveModel('left'));
-            document.getElementById('move-right').addEventListener('click', () => moveModel('right'));
-            
-            // Rotation controls
-            document.getElementById('rotate-up').addEventListener('click', () => rotateModel('up'));
-            document.getElementById('rotate-down').addEventListener('click', () => rotateModel('down'));
-            document.getElementById('rotate-left').addEventListener('click', () => rotateModel('left'));
-            document.getElementById('rotate-right').addEventListener('click', () => rotateModel('right'));
-            
-            // Action buttons
-            document.getElementById('reset-button').addEventListener('click', resetModel);
-            document.getElementById('near-button').addEventListener('click', moveNear);
-            document.getElementById('far-button').addEventListener('click', moveFar);
-            document.getElementById('info-button').addEventListener('click', toggleInfoPanel);
-            document.getElementById('capture-button').addEventListener('click', captureARScreenshot);
-            document.getElementById('exit-button').addEventListener('click', endARSession);
-            
-            // Update model info
-            updateModelInfo();
-            
-            // Hide gesture hints after delay
-            setTimeout(() => {
-                document.getElementById('gesture-hints').classList.add('hidden');
-            }, 10000);
-        }
-        
-        function moveModel(direction) {
-            if (!isModelPlaced) return;
-            
-            const moveStep = 0.05;
-            
-            switch(direction) {
-                case 'up':
-                    modelOffset.z -= moveStep;
-                    break;
-                case 'down':
-                    modelOffset.z += moveStep;
-                    break;
-                case 'left':
-                    modelOffset.x -= moveStep;
-                    break;
-                case 'right':
-                    modelOffset.x += moveStep;
-                    break;
-            }
-            
-            // Apply offset to model position
-            modelRoot.position.x += modelOffset.x - modelRoot.position.x;
-            modelRoot.position.z += modelOffset.z - modelRoot.position.z;
-            
-            // Reset offset
-            modelOffset.x = 0;
-            modelOffset.z = 0;
-        }
-        
-        function rotateModel(direction) {
-            if (!isModelPlaced || !model) return;
-            
-            const rotateStep = 0.1;
-            
-            switch(direction) {
-                case 'up':
-                    modelRotation.x -= rotateStep;
-                    break;
-                case 'down':
-                    modelRotation.x += rotateStep;
-                    break;
-                case 'left':
-                    modelRotation.y += rotateStep;
-                    break;
-                case 'right':
-                    modelRotation.y += rotateStep;
-                    break;
-            }
-            
-            // Apply rotation
-            model.rotation.x = modelRotation.x;
-            model.rotation.y = modelRotation.y;
-        }
-        
-        function resetModel() {
-            if (!isModelPlaced) return;
-            
-            // Reset model rotation
-            modelRotation = { x: 0, y: 0, z: 0 };
-            if (model) {
-                model.rotation.set(0, 0, 0);
-            }
-            
-            // Reset model scale
-            currentSize = 1;
-            if (model) {
-                model.scale.setScalar(modelData.scale * currentSize);
-            }
-        }
-        
-        function moveNear() {
-            if (!isModelPlaced || !model) return;
-            
-            currentSize *= 1.2;
-            model.scale.setScalar(modelData.scale * currentSize);
-        }
-        
-        function moveFar() {
-            if (!isModelPlaced || !model) return;
-            
-            currentSize *= 0.8;
-            model.scale.setScalar(modelData.scale * currentSize);
-        }
-        
-        function toggleInfoPanel() {
-            const panel = document.getElementById('info-panel');
-            panel.classList.toggle('hidden');
-        }
-        
-        function captureARScreenshot() {
-            if (!xrSession) return;
-            
-            // Get the canvas
-            const canvas = renderer.domElement;
-            
-            // Create a download link
-            const link = document.createElement('a');
-            const filename = `AR_${modelData.title.replace(/\s+/g, '_')}_${Date.now()}.png`;
-            link.download = filename;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            
-            // Visual feedback
-            const button = document.getElementById('capture-button');
-            const originalText = button.querySelector('span:last-child').textContent;
-            button.querySelector('span:last-child').textContent = 'Saved!';
-            button.style.background = 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)';
-            
-            setTimeout(() => {
-                button.querySelector('span:last-child').textContent = originalText;
-                button.style.background = '';
-            }, 2000);
-        }
-        
-        function endARSession() {
-            if (xrSession) {
-                xrSession.end();
-            }
-        }
-        
-        function onXRSessionEnded() {
-            // Clean up
-            if (xrHitTestSource) {
-                xrHitTestSource.cancel();
-                xrHitTestSource = null;
-            }
-            
-            xrSession = null;
-            
-            // Show pre-AR UI
-            document.getElementById('enter-ar').style.display = 'block';
-            document.getElementById('model-selector').style.display = 'block';
-            
-            // Hide AR UI
-            document.getElementById('ar-overlay').classList.add('hidden');
-            document.getElementById('reticle').style.display = 'none';
-            
-            // Reset model placement
-            isModelPlaced = false;
-            if (modelRoot) {
-                modelRoot.visible = false;
-            }
-        }
-        
+
         function updateUI() {
             document.getElementById('model-title').textContent = modelData.title;
             document.getElementById('model-subtitle').textContent = modelData.subtitle;
+            
+            // Update info panel
+            document.getElementById('info-title').textContent = modelData.title;
+            document.getElementById('info-description').textContent = modelData.description;
+            document.getElementById('info-complexity').textContent = `Complexity: ${modelData.complexity}`;
+            document.getElementById('info-usage').textContent = `Usage: ${modelData.usage}`;
         }
-        
-        function updateModelInfo() {
-            const modelName = Object.keys(MODEL_CONFIGS).find(key => 
-                MODEL_CONFIGS[key] === modelData
-            );
-            
-            const enhancedData = ENHANCED_MODEL_DATA[modelName];
-            if (!enhancedData) return;
-            
-            // Update overview
-            const overviewContent = document.getElementById('overview-content');
-            if (overviewContent) {
-                overviewContent.textContent = enhancedData.overview;
+
+        // AR Control Functions
+        window.resetModel = function() {
+            if (currentModel) {
+                currentModel.rotation.set(0, 0, 0);
+                currentModel.scale.setScalar(modelData.scale);
             }
-            
-            // Update components list
-            const componentsList = document.getElementById('components-list');
-            if (componentsList) {
-                componentsList.innerHTML = '';
-                enhancedData.components.forEach((component) => {
-                    const li = document.createElement('li');
-                    li.className = 'hotspot-item';
-                    li.textContent = component;
-                    componentsList.appendChild(li);
-                });
+        };
+
+        window.scaleUp = function() {
+            if (currentModel) {
+                currentModel.scale.multiplyScalar(1.2);
             }
-            
-            // Update performance info
-            const performanceContent = document.getElementById('performance-content');
-            if (performanceContent) {
-                performanceContent.innerHTML = `
-                    <div><strong>Complexity:</strong> ${enhancedData.performance}</div>
-                    <div><strong>Use Cases:</strong> ${enhancedData.useCases}</div>
-                `;
+        };
+
+        window.scaleDown = function() {
+            if (currentModel) {
+                currentModel.scale.multiplyScalar(0.8);
             }
-        }
-        
-        function onWindowResize() {
-            if (camera) {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
+        };
+
+        window.rotateModel = function() {
+            if (currentModel) {
+                currentModel.rotation.y += Math.PI / 4;
             }
-            if (renderer) {
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            }
-        }
-        
-        function updateProgress(percent, message = '') {
-            const progressFill = document.getElementById('progress-fill');
-            const progressText = document.getElementById('progress-text');
-            
-            if (progressFill) {
-                progressFill.style.width = percent + '%';
-            }
-            
-            if (progressText && message) {
-                progressText.textContent = message;
-            }
-        }
-        
-        function showError(message) {
-            document.getElementById('loading').classList.add('hidden');
-            const errorDiv = document.getElementById('error');
-            if (errorDiv) {
-                const errorText = errorDiv.querySelector('div:last-child');
-                if (errorText) {
-                    errorText.textContent = message;
-                }
-                errorDiv.classList.remove('hidden');
-            }
-        }
-        
-        function showWebXRNotSupported(message) {
-            document.getElementById('loading').classList.add('hidden');
-            const notSupportedDiv = document.getElementById('webxr-not-supported');
-            
-            if (notSupportedDiv) {
-                const paragraph = notSupportedDiv.querySelector('p:first-of-type');
-                if (paragraph && message) {
-                    paragraph.textContent = message;
-                }
-                notSupportedDiv.classList.remove('hidden');
-            }
-        }
+        };
+
+        window.toggleInfo = function() {
+            const infoPanel = document.getElementById('model-info');
+            infoPanel.classList.toggle('active');
+        };
+
     </script>
 </body>
 </html>
