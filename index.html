@@ -203,35 +203,29 @@
             z-index: 100;
         }
 
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: rgba(0,0,0,0.7);
+        .debug-info {
+            position: absolute;
+            bottom: 80px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
             color: white;
-            padding: 10px 20px;
+            padding: 5px;
             border-radius: 5px;
-            z-index: 1000;
-            transition: transform 0.3s ease-out;
-          }
-          .toast-visible {
-            transform: translateX(-50%) translateY(0);
-          }
-          .toast-error {
-            background: rgba(220,53,69,0.9);
-          }
+            font-size: 10px;
+            z-index: 100;
+            max-width: 200px;
+            overflow: hidden;
+        }
 
-        .sr-only {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          padding: 0;
-          margin: -1px;
-          overflow: hidden;
-          clip: rect(0, 0, 0, 0);
-          white-space: nowrap;
-          border-width: 0;
+        .retry-button {
+            background-color: #00ffff;
+            color: black;
+            border: none;
+            border-radius: 5px;
+            padding: 10px 20px;
+            margin-top: 20px;
+            cursor: pointer;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -254,8 +248,9 @@
     
     <!-- Error Screen -->
     <div id="error" class="error hidden">
-        <div>AR Not Supported</div>
-        <div style="margin-top: 10px; font-size: 12px;">This device/browser does not support WebXR AR</div>
+        <div id="error-message">AR Not Supported</div>
+        <div style="margin-top: 10px; font-size: 12px;" id="error-details">This device/browser does not support WebXR AR</div>
+        <button class="retry-button" id="retry-button">Retry</button>
     </div>
     
     <!-- AR Overlay (UI) -->
@@ -273,9 +268,8 @@
             <button class="ar-button" id="rotate-left">⟲</button>
             <button class="ar-button" id="place-model">📍</button>
             <button class="ar-button" id="rotate-right">⟳</button>
-            <button class="ar-button" id="scale-down">-</button>
-            <button class="ar-button" id="scale-up">+</button>
         </div>
+        <div id="debug-info" class="debug-info hidden"></div>
     </div>
 
     <div class="model-selector">
@@ -284,21 +278,8 @@
     </div>
     
     <script>
-    // Create namespaced modules
-const ARApp = {
-  config: {}, // Store configuration
-  webXR: {},  // WebXR specific functionality
-  fallback: {}, // Fallback mode functionality
-  ui: {},     // UI controls and interactions
-  utils: {},  // Utility functions
-  init() {    // Main initialization
-    this.setupEventListeners();
-    this.loadModelConfig();
-    this.checkARSupport();
-  }
-};
-
-ARApp.config.models = {
+    // --- Model configs (relative paths for GitHub Pages) ---
+    const MODEL_CONFIGS = {
         array: {
             title: "Array Data Structure",
             subtitle: "Linear collection of elements with indexed access",
@@ -351,6 +332,10 @@ ARApp.config.models = {
         }
     };
 
+    // Debug mode
+    const DEBUG = true;
+    
+    // Global variables
     let scene, camera, renderer, controller, reticle, model, currentModelName;
     let placed = false;
     let usingFallbackMode = false;
@@ -358,20 +343,82 @@ ARApp.config.models = {
     let deviceOrientationControls = null;
     let modelRotationY = 0;
     let videoElement;
+    let modelLoaded = false;
+    let cameraInitialized = false;
+    let initializationTimeout;
+    let loadingTimeoutDuration = 15000; // 15 seconds timeout
 
-    let lastFrameTime = 0;
-    let frameRate = 60;
+    // Debug logging
+    function debugLog(message) {
+        if (DEBUG) {
+            console.log(`[AR Debug] ${message}`);
+            const debugElement = document.getElementById('debug-info');
+            if (debugElement) {
+                debugElement.classList.remove('hidden');
+                debugElement.textContent = message;
+            }
+        }
+    }
 
-    document.addEventListener('DOMContentLoaded', () => ARApp.init());
+    document.addEventListener('DOMContentLoaded', async function() {
+        debugLog("DOM loaded, initializing app");
+        
+        // Set up retry button
+        document.getElementById('retry-button').addEventListener('click', function() {
+            window.location.reload();
+        });
+        
+        // Get model name from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        currentModelName = urlParams.get('model') || 'array';
+        const modelData = MODEL_CONFIGS[currentModelName] || MODEL_CONFIGS.array;
+        document.getElementById('model-title').textContent = modelData.title;
+        document.getElementById('model-subtitle').textContent = modelData.subtitle;
 
-    ARApp.setupEventListeners = function() {
+        // Set initialization timeout
+        initializationTimeout = setTimeout(() => {
+            debugLog("Initialization timeout reached");
+            if (!modelLoaded || (usingFallbackMode && !cameraInitialized)) {
+                showError("AR initialization timed out. Please check your internet connection and try again.");
+            }
+        }, loadingTimeoutDuration);
+
+        // Check WebXR support with robust error handling
+        try {
+            debugLog("Checking WebXR support");
+            if (navigator.xr && typeof navigator.xr.isSessionSupported === 'function') {
+                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                    if (supported) {
+                        debugLog("WebXR AR is supported");
+                        initWebXR(modelData);
+                    } else {
+                        debugLog("WebXR AR not supported, trying fallback mode");
+                        initFallbackAR(modelData);
+                    }
+                }).catch((err) => {
+                    debugLog("Error checking WebXR support: " + err.message);
+                    initFallbackAR(modelData);
+                });
+            } else {
+                debugLog("WebXR not available, trying fallback mode");
+                initFallbackAR(modelData);
+            }
+        } catch (e) {
+            debugLog("Exception during AR support check: " + e.message);
+            initFallbackAR(modelData);
+        }
+
+        // Set up UI controls for fallback mode
         document.getElementById('place-model').addEventListener('click', () => {
-            if (usingFallbackMode && !placed && model) {
+            if (usingFallbackMode && !placed && model && modelLoaded) {
+                debugLog("Placing model in fallback mode");
                 placed = true;
                 model.visible = true;
                 // Position the model in front of the camera
                 model.position.set(0, 0, -2);
                 document.getElementById('ar-instructions').classList.add('hidden');
+            } else if (!modelLoaded) {
+                debugLog("Cannot place model - not loaded yet");
             }
         });
 
@@ -388,143 +435,22 @@ ARApp.config.models = {
                 model.rotation.y = modelRotationY;
             }
         });
+    });
 
-        document.getElementById('scale-up').addEventListener('click', () => {
-            if (model && placed) {
-                const currentScale = model.scale.x;
-                model.scale.set(currentScale * 1.2, currentScale * 1.2, currentScale * 1.2);
-            }
-        });
-
-        document.getElementById('scale-down').addEventListener('click', () => {
-            if (model && placed) {
-                const currentScale = model.scale.x;
-                model.scale.set(currentScale * 0.8, currentScale * 0.8, currentScale * 0.8);
-            }
-        });
-
-        // Update your buttons with proper ARIA roles
-        document.querySelectorAll('.ar-button').forEach(button => {
-          button.setAttribute('role', 'button');
-          button.setAttribute('tabindex', '0');
-          button.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              button.click();
-            }
-          });
-        });
-    }
-
-    ARApp.loadModelConfig = function() {
-        // Get model name from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        currentModelName = urlParams.get('model') || 'array';
-        const modelData = ARApp.config.models[currentModelName] || ARApp.config.models.array;
-        document.getElementById('model-title').textContent = modelData.title;
-        document.getElementById('model-subtitle').textContent = modelData.subtitle;
-    }
-
-    // Add this utility function
-    function logError(component, error, fatal = false) {
-        console.error(`[${component}] ${error.message || error}`);
-
-        // For non-fatal errors, show a toast notification
-        if (!fatal) {
-            showToast(`Error: ${error.message || error}`, 'error');
-        } else {
-            showError(`${error.message || error}`);
-        }
-
-        // Optional: send to analytics/logging service
-    }
-
-    // Add a toast notification system
-    function showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${type}`;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-            toast.classList.add('toast-visible');
-            setTimeout(() => {
-                toast.classList.remove('toast-visible');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }, 10);
-    }
-
-    // Add this function to check device capabilities
-    function checkDeviceCapabilities() {
-        const capabilities = {
-            webGL: false,
-            webXR: false,
-            camera: false,
-            gyroscope: false,
-            touchscreen: false
-        };
-
-        // Check WebGL
-        try {
-            const canvas = document.createElement('canvas');
-            capabilities.webGL = !!(window.WebGLRenderingContext &&
-                (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
-        } catch (e) {
-            capabilities.webGL = false;
-        }
-
-        // Check WebXR
-        capabilities.webXR = !!(navigator.xr && typeof navigator.xr.isSessionSupported === 'function');
-
-        // Check camera
-        capabilities.camera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-
-        // Check gyroscope
-        capabilities.gyroscope = !!(window.DeviceOrientationEvent);
-
-        // Check touchscreen
-        capabilities.touchscreen = 'ontouchstart' in window;
-
-        console.log('Device capabilities:', capabilities);
-        return capabilities;
-    }
-
-    // Call this during initialization
-    const deviceCapabilities = checkDeviceCapabilities();
-
-    ARApp.checkARSupport = function() {
-        // Check WebXR support with robust error handling
-        try {
-            if (navigator.xr && typeof navigator.xr.isSessionSupported === 'function') {
-                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-                    if (supported) {
-                        initWebXR(ARApp.config.models[currentModelName] || ARApp.config.models.array);
-                    } else {
-                        console.log("WebXR AR not supported, trying fallback mode");
-                        initFallbackAR(ARApp.config.models[currentModelName] || ARApp.config.models.array);
-                    }
-                }).catch((err) => {
-                    console.error("Error checking WebXR support:", err);
-                    initFallbackAR(ARApp.config.models[currentModelName] || ARApp.config.models.array);
-                });
-            } else {
-                console.log("WebXR not available, trying fallback mode");
-                initFallbackAR(ARApp.config.models[currentModelName] || ARApp.config.models.array);
-            }
-        } catch (e) {
-            console.error("Exception during AR support check:", e);
-            initFallbackAR(ARApp.config.models[currentModelName] || ARApp.config.models.array);
-        }
-    }
-
-    function showError(msg) {
+    function showError(msg, details = "") {
+        debugLog("Error: " + msg);
+        clearTimeout(initializationTimeout);
+        
         // Hide loading screen
         document.getElementById('loading').classList.add('hidden');
+        
         // Show error message
         const errorDiv = document.getElementById('error');
         if (errorDiv) {
-            errorDiv.querySelector('div').textContent = msg;
+            document.getElementById('error-message').textContent = msg;
+            if (details) {
+                document.getElementById('error-details').textContent = details;
+            }
             errorDiv.classList.remove('hidden');
         } else {
             // Fallback: alert if error div is missing
@@ -533,6 +459,8 @@ ARApp.config.models = {
     }
 
     function initWebXR(modelData) {
+        debugLog("Initializing WebXR");
+        
         // Setup Three.js scene
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
@@ -557,7 +485,13 @@ ARApp.config.models = {
         scene.add(reticle);
 
         // ARButton
-        document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+        try {
+            document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+        } catch (e) {
+            debugLog("Error creating AR button: " + e.message);
+            showError("Failed to initialize AR", e.message);
+            return;
+        }
 
         // Controller for hit test
         controller = renderer.xr.getController(0);
@@ -580,76 +514,6 @@ ARApp.config.models = {
         // Hit test source
         let hitTestSource = null;
         let hitTestSourceRequested = false;
-
-        // Add environment light estimation for realistic rendering:
-        if (navigator.xr && typeof navigator.xr.requestSession === 'function') {
-          const sessionInit = { 
-            requiredFeatures: ['hit-test'],
-            optionalFeatures: ['light-estimation'] 
-          };
-          
-          navigator.xr.requestSession('immersive-ar', sessionInit).then(session => {
-            if ('requestLightProbe' in session) {
-              session.requestLightProbe().then(lightProbe => {
-                lightProbe.addEventListener('reflectionchange', () => {
-                  const estimate = lightProbe.reflectionchange;
-                  // Update lighting in your scene based on the estimate
-                  updateSceneLighting(estimate);
-                });
-              }).catch(err => {
-                console.log('Light estimation not available:', err);
-              });
-            }
-          });
-        }
-
-        // Add object occlusion for more realistic AR:
-        const sessionInit = { 
-          requiredFeatures: ['hit-test'],
-          optionalFeatures: ['light-estimation', 'depth-sensing'] 
-        };
-
-        function updateSceneLighting(estimate) {
-          // Create environment map from light probe
-          if (estimate && estimate.sphericalHarmonicsCoefficients) {
-            const sh = estimate.sphericalHarmonicsCoefficients;
-            const envMap = new THREE.LightProbe();
-            envMap.sh.fromArray(sh);
-            envMap.intensity = 1;
-            scene.environment = envMap;
-          }
-        }
-
-        // Add depth handling
-        function setupDepthSensing(session) {
-          if ('getDepthInformation' in frame) {
-            const depthInfo = frame.getDepthInformation(view);
-            if (depthInfo) {
-              // Create depth texture
-              const depthTexture = new THREE.DataTexture(
-                depthInfo.data,
-                depthInfo.width,
-                depthInfo.height,
-                THREE.RedFormat,
-                THREE.FloatType
-              );
-              
-              // Use depth texture for occlusion
-              const occlusionMaterial = new THREE.MeshBasicMaterial({
-                map: depthTexture,
-                transparent: true
-              });
-              
-              // Create occlusion plane
-              const occlusionPlane = new THREE.Mesh(
-                new THREE.PlaneGeometry(2, 2),
-                occlusionMaterial
-              );
-              occlusionPlane.renderOrder = -1;
-              scene.add(occlusionPlane);
-            }
-          }
-        }
 
         function render(timestamp, frame) {
             if (frame) {
@@ -682,7 +546,6 @@ ARApp.config.models = {
                 }
             }
 
-            updateFrameRate(timestamp);
             renderer.render(scene, camera);
         }
 
@@ -697,68 +560,8 @@ ARApp.config.models = {
         }
     }
 
-    let isDragging = false;
-    let previousTouch = { x: 0, y: 0 };
-
-    document.getElementById('ar-canvas').addEventListener('touchstart', (event) => {
-        if (usingFallbackMode && placed && event.touches.length === 1) {
-            isDragging = true;
-            previousTouch.x = event.touches[0].clientX;
-            previousTouch.y = event.touches[0].clientY;
-        }
-    });
-
-    document.getElementById('ar-canvas').addEventListener('touchmove', (event) => {
-        if (isDragging && model) {
-            const touch = event.touches[0];
-            const movementX = (touch.clientX - previousTouch.x) * 0.01;
-            const movementY = (touch.clientY - previousTouch.y) * 0.01;
-
-            model.position.x += movementX;
-            model.position.y -= movementY;
-
-            previousTouch.x = touch.clientX;
-            previousTouch.y = touch.clientY;
-        }
-    });
-
-    document.getElementById('ar-canvas').addEventListener('touchend', () => {
-        isDragging = false;
-    });
-
-    // Add gesture recognition for model manipulation:
-    let initialTouchDistance = 0;
-    let initialModelScale = 1;
-
-    document.getElementById('ar-canvas').addEventListener('touchstart', (event) => {
-      if (event.touches.length === 2) {
-        // Pinch gesture start
-        initialTouchDistance = Math.hypot(
-          event.touches[0].clientX - event.touches[1].clientX,
-          event.touches[0].clientY - event.touches[1].clientY
-        );
-        initialModelScale = model.scale.x;
-      }
-    });
-
-    document.getElementById('ar-canvas').addEventListener('touchmove', (event) => {
-      if (event.touches.length === 2 && model && placed) {
-        // Pinch gesture move - handle scaling
-        const currentDistance = Math.hypot(
-          event.touches[0].clientX - event.touches[1].clientX,
-          event.touches[0].clientY - event.touches[1].clientY
-        );
-        
-        const scaleFactor = currentDistance / initialTouchDistance;
-        const newScale = initialModelScale * scaleFactor;
-        
-        // Limit scale range
-        const clampedScale = Math.min(Math.max(newScale, 0.5), 5.0);
-        model.scale.set(clampedScale, clampedScale, clampedScale);
-      }
-    });
-
     function initFallbackAR(modelData) {
+        debugLog("Initializing fallback AR mode");
         usingFallbackMode = true;
         document.getElementById('fallback-notice').classList.remove('hidden');
         document.getElementById('ar-instructions').textContent = '📱 Tap the place button to position the model';
@@ -800,7 +603,6 @@ ARApp.config.models = {
                 // The model will be updated by the device orientation controls
             }
             
-            updateFrameRate(performance.now());
             renderer.render(scene, camera);
         }
         
@@ -815,63 +617,94 @@ ARApp.config.models = {
     }
 
     function loadModel(modelPath) {
-        // Add KTX2 and Draco compression support
-        const ktx2Loader = new THREE.KTX2Loader();
-        ktx2Loader.setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/basis/');
-        ktx2Loader.detectSupport(renderer);
+        debugLog("Loading model: " + modelPath);
+        updateProgress(10, "Loading 3D model...");
         
-        const dracoLoader = new THREE.DRACOLoader();
-        dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/draco/');
+        // Create a simple cube as placeholder in case model fails to load
+        const createFallbackCube = () => {
+            debugLog("Creating fallback cube model");
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+            const cube = new THREE.Mesh(geometry, material);
+            cube.visible = false;
+            cube.scale.set(0.5, 0.5, 0.5);
+            scene.add(cube);
+            return cube;
+        };
         
-        const loader = new THREE.GLTFLoader();
-        loader.setKTX2Loader(ktx2Loader);
-        loader.setDRACOLoader(dracoLoader);
-        
-        loader.load(
-            modelPath,
-            (gltf) => {
-                //model = gltf.scene;
-                //model.visible = false;
-                //model.scale.set(3.5, 3.5, 3.5);
-                //scene.add(model);
-                model = createModelWithLOD(gltf);
-                model.visible = false;
-                scene.add(model);
+        // Try to load the actual model
+        try {
+            const loader = new THREE.GLTFLoader();
+            
+            // Add timeout for model loading
+            const modelLoadTimeout = setTimeout(() => {
+                debugLog("Model load timeout reached");
+                if (!modelLoaded) {
+                    model = createFallbackCube();
+                    modelLoaded = true;
+                    updateProgress(100, "Using fallback model");
+                    document.getElementById('loading').classList.add('hidden');
+                    clearTimeout(initializationTimeout);
+                }
+            }, 10000); // 10 second timeout for model loading
+            
+            loader.load(
+                modelPath,
+                (gltf) => {
+                    debugLog("Model loaded successfully");
+                    clearTimeout(modelLoadTimeout);
+                    model = gltf.scene;
+                    model.visible = false;
+                    model.scale.set(3.5, 3.5, 3.5);
+                    scene.add(model);
+                    modelLoaded = true;
+                    
+                    // If in fallback mode and camera is ready, hide loading screen
+                    if (!usingFallbackMode || (usingFallbackMode && cameraInitialized)) {
+                        document.getElementById('loading').classList.add('hidden');
+                        clearTimeout(initializationTimeout);
+                    }
+                    
+                    updateProgress(100, "Model loaded");
+                },
+                (xhr) => {
+                    const percent = xhr.loaded / (xhr.total || 1) * 100;
+                    updateProgress(percent, "Loading 3D model...");
+                },
+                (err) => {
+                    debugLog("GLTF Load Error: " + err.message);
+                    clearTimeout(modelLoadTimeout);
+                    
+                    // Create a fallback cube instead
+                    model = createFallbackCube();
+                    modelLoaded = true;
+                    
+                    // If in fallback mode and camera is ready, hide loading screen
+                    if (!usingFallbackMode || (usingFallbackMode && cameraInitialized)) {
+                        document.getElementById('loading').classList.add('hidden');
+                        clearTimeout(initializationTimeout);
+                    }
+                    
+                    updateProgress(100, "Using fallback model");
+                }
+            );
+        } catch (e) {
+            debugLog("Exception during model loading: " + e.message);
+            model = createFallbackCube();
+            modelLoaded = true;
+            
+            // If in fallback mode and camera is ready, hide loading screen
+            if (!usingFallbackMode || (usingFallbackMode && cameraInitialized)) {
                 document.getElementById('loading').classList.add('hidden');
-            },
-            (xhr) => {
-                const percent = xhr.loaded / (xhr.total || 1) * 100;
-                updateProgress(percent, "Loading 3D model...");
-            },
-            (err) => {
-                console.error("GLTF Load Error:", err);
-                showError("Failed to load model.");
+                clearTimeout(initializationTimeout);
             }
-        );
-    }
-
-    function createModelWithLOD(gltf) {
-        const lod = new THREE.LOD();
-        
-        // Original high-quality model
-        const highDetail = gltf.scene;
-        highDetail.scale.set(3.5, 3.5, 3.5);
-        lod.addLevel(highDetail, 0);
-        
-        // Create simplified version for distance viewing
-        const lowDetail = highDetail.clone();
-        // Apply simplification or swap with a lower poly version
-        lowDetail.traverse(obj => {
-            if (obj.isMesh && obj.geometry) {
-              // Simplify geometry or use lower resolution textures
-            }
-        });
-        lod.addLevel(lowDetail, 5);
-        
-        return lod;
+            
+            updateProgress(100, "Using fallback model");
+        }
     }
 
     function initCameraStream() {
+        debugLog("Initializing camera stream");
         videoElement = document.getElementById('video-background');
         videoElement.style.display = 'block';
         
@@ -885,23 +718,67 @@ ARApp.config.models = {
                 } 
             })
             .then(function(stream) {
+                debugLog("Camera stream initialized successfully");
                 videoElement.srcObject = stream;
+                cameraInitialized = true;
+                
+                // If model is loaded, hide loading screen
+                if (modelLoaded) {
+                    document.getElementById('loading').classList.add('hidden');
+                    clearTimeout(initializationTimeout);
+                }
+                
                 updateProgress(100, "Camera initialized");
+                
+                // Add event listener to detect when video is actually playing
+                videoElement.addEventListener('playing', () => {
+                    debugLog("Camera video is now playing");
+                });
             })
             .catch(function(error) {
-                console.error("Camera error:", error);
-                showError("Could not access camera. Please ensure camera permissions are granted.");
+                debugLog("Camera error: " + error.message);
+                cameraInitialized = true; // Mark as initialized even though it failed
+                
+                // Create a black background instead
+                videoElement.style.display = 'none';
+                document.body.style.backgroundColor = '#000000';
+                
+                // If model is loaded, hide loading screen
+                if (modelLoaded) {
+                    document.getElementById('loading').classList.add('hidden');
+                    clearTimeout(initializationTimeout);
+                }
+                
+                // Don't show error, just continue without camera
+                updateProgress(100, "Continuing without camera");
             });
         } else {
-            showError("Your browser doesn't support camera access.");
+            debugLog("getUserMedia not supported");
+            cameraInitialized = true; // Mark as initialized even though it failed
+            
+            // Create a black background instead
+            videoElement.style.display = 'none';
+            document.body.style.backgroundColor = '#000000';
+            
+            // If model is loaded, hide loading screen
+            if (modelLoaded) {
+                document.getElementById('loading').classList.add('hidden');
+                clearTimeout(initializationTimeout);
+            }
+            
+            // Don't show error, just continue without camera
+            updateProgress(100, "Continuing without camera");
         }
     }
 
     function checkDeviceOrientation() {
+        debugLog("Checking device orientation support");
+        
         // Check if device orientation is available
         if (window.DeviceOrientationEvent) {
             // For iOS 13+ we need to request permission
             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                debugLog("iOS device orientation permission required");
                 // Create a button to request permission
                 const permissionBtn = document.createElement('button');
                 permissionBtn.innerHTML = "Enable Motion Controls";
@@ -916,13 +793,20 @@ ARApp.config.models = {
                     DeviceOrientationEvent.requestPermission()
                         .then(response => {
                             if (response === 'granted') {
+                                debugLog("Motion permission granted");
                                 permissionBtn.remove();
                                 initDeviceOrientation();
                             } else {
-                                showError("Motion permission denied");
+                                debugLog("Motion permission denied");
+                                permissionBtn.remove();
+                                // Continue without orientation
                             }
                         })
-                        .catch(console.error);
+                        .catch(error => {
+                            debugLog("Error requesting motion permission: " + error.message);
+                            permissionBtn.remove();
+                            // Continue without orientation
+                        });
                 };
                 
                 document.body.appendChild(permissionBtn);
@@ -931,16 +815,18 @@ ARApp.config.models = {
                 initDeviceOrientation();
             }
         } else {
-            console.log("Device orientation not supported");
+            debugLog("Device orientation not supported");
         }
     }
 
     function initDeviceOrientation() {
+        debugLog("Initializing device orientation");
+        
         // Simple orientation handler
         window.addEventListener('deviceorientation', function(event) {
             if (!gyroAvailable) {
                 gyroAvailable = true;
-                console.log("Device orientation available");
+                debugLog("Device orientation available");
             }
             
             if (model && placed) {
@@ -964,29 +850,12 @@ ARApp.config.models = {
         const progressText = document.getElementById('progress-text');
         if (progressFill) progressFill.style.width = percent + '%';
         if (progressText && message) progressText.textContent = message;
+        
+        if (DEBUG) {
+            debugLog(`Progress: ${percent}% - ${message}`);
+        }
     }
 
-    function updateFrameRate(timestamp) {
-        if (lastFrameTime === 0) {
-          lastFrameTime = timestamp;
-          return;
-        }
-        
-        const delta = timestamp - lastFrameTime;
-        frameRate = 1000 / delta;
-        lastFrameTime = timestamp;
-        
-        // Adapt quality based on frame rate
-        if (frameRate < 30) {
-          // Reduce quality
-          renderer.setPixelRatio(window.devicePixelRatio * 0.7);
-        } else {
-          // Restore quality
-          renderer.setPixelRatio(window.devicePixelRatio);
-        }
-      }
-
-    const MODEL_CONFIGS = ARApp.config.models;
     const modelKeys = Object.keys(MODEL_CONFIGS);
     let currentModelIndex = modelKeys.indexOf(currentModelName);
 
@@ -1016,185 +885,6 @@ ARApp.config.models = {
 
         loadModel(modelData.model);
     }
-
-    // Add screen reader announcements
-    function announceToScreenReader(message) {
-      const announcement = document.createElement('div');
-      announcement.setAttribute('aria-live', 'polite');
-      announcement.classList.add('sr-only');
-      announcement.textContent = message;
-      document.body.appendChild(announcement);
-      
-      setTimeout(() => {
-        announcement.textContent = '';
-        setTimeout(() => announcement.remove(), 100);
-      }, 3000);
-    }
-
-    // Add CSS for toasts
-    const style = document.createElement('style');
-    style.textContent = `
-      .toast {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%) translateY(100px);
-        background: rgba(0,0,0,0.7);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 5px;
-        z-index: 1000;
-        transition: transform 0.3s ease-out;
-      }
-      .toast-visible {
-        transform: translateX(-50%) translateY(0);
-      }
-      .toast-error {
-        background: rgba(220,53,69,0.9);
-      }
-    `;
-    document.head.appendChild(style);
-
-    // Add this to your script
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/ar-service-worker.js')
-          .then(registration => {
-            console.log('ServiceWorker registration successful');
-          })
-          .catch(error => {
-            console.error('ServiceWorker registration failed:', error);
-          });
-      });
-    }
-
-// Add this to your initialization
-const analytics = {
-  sessionStart: Date.now(),
-  events: [],
-  deviceInfo: {
-    userAgent: navigator.userAgent,
-    screenSize: `${window.innerWidth}x${window.innerHeight}`,
-    pixelRatio: window.devicePixelRatio,
-    language: navigator.language
-  },
-  
-  logEvent(category, action, label = null, value = null) {
-    this.events.push({
-      timestamp: Date.now(),
-      category,
-      action,
-      label,
-      value
-    });
-    
-    // If you have a backend analytics service:
-    // sendToAnalyticsServer({ category, action, label, value });
-    
-    console.log(`Analytics: ${category} - ${action} - ${label} - ${value}`);
-  },
-  
-  getSessionDuration() {
-    return Math.floor((Date.now() - this.sessionStart) / 1000);
-  }
-};
-
-// Track key events
-function trackAREvents() {
-  analytics.logEvent('ar_session', 'start', usingFallbackMode ? 'fallback' : 'webxr');
-  
-  // Track model placement
-  document.getElementById('place-model').addEventListener('click', () => {
-    if (usingFallbackMode && !placed && model) {
-      analytics.logEvent('model', 'placed', currentModelName);
-    }
-  });
-  
-  // Track session duration when page is closed
-  window.addEventListener('beforeunload', () => {
-    analytics.logEvent('ar_session', 'end', null, analytics.getSessionDuration());
-  });
-}
-
-// Call this during initialization
-trackAREvents();
-
-// Add battery monitoring
-if ('getBattery' in navigator) {
-  navigator.getBattery().then(battery => {
-    // Initial battery check
-    checkBatteryStatus(battery);
-    
-    // Monitor for changes
-    battery.addEventListener('levelchange', () => {
-      checkBatteryStatus(battery);
-    });
-  });
-}
-
-function checkBatteryStatus(battery) {
-  const batteryLevel = battery.level * 100; // Convert to percentage
-  
-  // Low battery mode
-  if (batteryLevel < 15) {
-    // Reduce quality to save battery
-    renderer.setPixelRatio(1.0);
-    renderer.setSize(window.innerWidth * 0.8, window.innerHeight * 0.8);
-    
-    // Reduce animation frame rate
-    if (!battery.charging) {
-      // Use a throttled animation loop
-      useThrottledAnimationLoop(30); // 30fps instead of 60fps
-    }
-    
-    showToast("Low battery mode activated", "info");
-  }
-}
-
-// Throttled animation loop
-let targetFPS = 60;
-
-function useThrottledAnimationLoop(fps) {
-  targetFPS = fps;
-}
-
-function throttledAnimationFrame(timestamp) {
-  requestAnimationFrame(throttledAnimationFrame);
-  
-  const elapsed = timestamp - lastFrameTime;
-  const fpsInterval = 1000 / targetFPS;
-  
-  if (elapsed < fpsInterval) return;
-  
-  lastFrameTime = timestamp - (elapsed % fpsInterval);
-  
-  // Your render code here
-  renderer.render(scene, camera);
-}
-
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    // Page is hidden, pause intensive operations
-    if (usingFallbackMode) {
-      // Pause video if in fallback mode
-      if (videoElement && !videoElement.paused) {
-        videoElement.pause();
-      }
-    }
-    
-    analytics.logEvent('visibility', 'hidden');
-  } else {
-    // Page is visible again, resume operations
-    if (usingFallbackMode) {
-      // Resume video if in fallback mode
-      if (videoElement && videoElement.paused) {
-        videoElement.play();
-      }
-    }
-    
-    analytics.logEvent('visibility', 'visible');
-  }
-});
     </script>
 </body>
 </html>
