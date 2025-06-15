@@ -133,6 +133,24 @@
             font-size: 12px;
             max-width: 80%;
         }
+
+        /* Debug panel */
+        .debug-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 10px;
+            max-width: 200px;
+            z-index: 100;
+            display: none;
+        }
+
+        .debug-panel.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -175,6 +193,10 @@
         📱 Point your camera at a flat surface and tap to place the model
     </div>
 
+    <div class="debug-panel" id="debug-panel">
+        <div id="debug-content"></div>
+    </div>
+
     <script type="importmap">
         {
             "imports": {
@@ -198,7 +220,7 @@
         let modelData = {};
         let placedModels = [];
 
-        // Model configurations
+        // Enhanced model configurations with exact file names from your image
         const MODEL_CONFIGS = {
             array: {
                 title: "Array Data Structure",
@@ -212,7 +234,7 @@
             binary_tree: {
                 title: "Binary Tree",
                 subtitle: "Hierarchical structure with parent-child relationships",
-                model: "./models/binary tree.glb",
+                model: "./models/binary tree.glb", // Note the space in filename
                 scale: 0.3,
                 description: "Binary trees are hierarchical data structures with at most two children per node.",
                 complexity: "Search: O(log n), Insert: O(log n), Delete: O(log n)",
@@ -248,7 +270,7 @@
             merge_sort: {
                 title: "Merge Sort Algorithm",
                 subtitle: "Divide and conquer sorting technique",
-                model: "./models/mergesort .glb",
+                model: "./models/mergesort .glb", // Note the space before .glb
                 scale: 0.3,
                 description: "Divide-and-conquer algorithm that recursively sorts array halves.",
                 complexity: "Time: O(n log n), Space: O(n), Stable: Yes",
@@ -257,7 +279,7 @@
             osi_model: {
                 title: "OSI Model",
                 subtitle: "7-layer network communication framework",
-                model: "./models/osi model.glb",
+                model: "./models/osi model.glb", // Note the space in filename
                 scale: 0.3,
                 description: "Conceptual framework standardizing network communication into seven layers.",
                 complexity: "Standardized communication, protocol independence, modular design",
@@ -292,6 +314,24 @@
             }
         };
 
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const modelParam = urlParams.get('model');
+        const confidenceParam = urlParams.get('confidence');
+        const debugParam = urlParams.get('debug');
+
+        console.log('🚀 AR Viewer initialized with params:', { 
+            model: modelParam, 
+            confidence: confidenceParam,
+            debug: debugParam 
+        });
+
+        // Show debug panel if requested
+        if (debugParam === 'true') {
+            document.getElementById('debug-panel').classList.add('active');
+            updateDebugInfo();
+        }
+
         init();
 
         function init() {
@@ -302,12 +342,12 @@
 
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
-            // Lighting setup (same as working example)
+            // Lighting setup
             const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 3);
             light.position.set(0.5, 1, 0.25);
             scene.add(light);
 
-            // Renderer setup (exactly like working example)
+            // Renderer setup
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -315,7 +355,7 @@
             renderer.xr.enabled = true;
             container.appendChild(renderer.domElement);
 
-            // AR Button (same as working example)
+            // AR Button
             const arButton = ARButton.createButton(renderer, {
                 requiredFeatures: ['hit-test'],
                 optionalFeatures: ['dom-overlay'],
@@ -323,7 +363,7 @@
             });
             document.body.appendChild(arButton);
 
-            // Controller setup (same as working example)
+            // Controller setup
             controller = renderer.xr.getController(0);
             controller.addEventListener('select', onSelect);
             scene.add(controller);
@@ -343,20 +383,42 @@
                 const selectedModel = modelSelect.value;
                 modelData = MODEL_CONFIGS[selectedModel];
                 updateUI();
+                console.log('Model changed to:', selectedModel, modelData);
             });
 
-            // Set initial model data
-            modelData = MODEL_CONFIGS[modelSelect.value];
-            updateUI();
+            // Auto-select model from URL parameter
+            if (modelParam && MODEL_CONFIGS[modelParam]) {
+                console.log('Auto-selecting model from URL:', modelParam);
+                modelSelect.value = modelParam;
+                modelData = MODEL_CONFIGS[modelParam];
+                updateUI();
+                
+                // Highlight that model was auto-selected
+                document.getElementById('model-title').style.color = '#4CAF50';
+                document.getElementById('model-subtitle').textContent = `Auto-selected: ${modelData.subtitle}`;
+            } else {
+                // Set default model
+                modelData = MODEL_CONFIGS[modelSelect.value];
+                updateUI();
+            }
 
             // Setup AR session events
             renderer.xr.addEventListener('sessionstart', onSessionStart);
             renderer.xr.addEventListener('sessionend', onSessionEnd);
 
             window.addEventListener('resize', onWindowResize);
+
+            // Send ready signal to React Native
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'ar_ready',
+                    selectedModel: modelParam || 'array'
+                }));
+            }
         }
 
         function onSessionStart() {
+            console.log('AR session started');
             // Show AR controls
             document.getElementById('ar-controls').classList.add('active');
             
@@ -372,12 +434,27 @@
                 hitTestSourceRequested = false;
                 hitTestSource = null;
             });
+
+            // Send session start to React Native
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'webxr_session_started'
+                }));
+            }
         }
 
         function onSessionEnd() {
+            console.log('AR session ended');
             // Hide AR controls
             document.getElementById('ar-controls').classList.remove('active');
             document.getElementById('model-info').classList.remove('active');
+
+            // Send session end to React Native
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'webxr_session_ended'
+                }));
+            }
         }
 
         function onSelect() {
@@ -390,9 +467,12 @@
         function loadAndPlaceModel() {
             const loader = new GLTFLoader();
             
+            console.log('Loading model:', modelData.model);
+            
             loader.load(
                 modelData.model,
                 function(gltf) {
+                    console.log('✅ Model loaded successfully:', modelData.title);
                     const model = gltf.scene;
                     model.scale.setScalar(modelData.scale);
                     
@@ -411,12 +491,30 @@
                     
                     // Hide instructions
                     document.getElementById('instructions').style.display = 'none';
+                    
+                    // Send success to React Native
+                    if (window.ReactNativeWebView) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'model_loaded',
+                            modelName: modelData.title
+                        }));
+                    }
                 },
                 function(progress) {
                     console.log('Loading progress:', progress);
                 },
                 function(error) {
-                    console.error('Error loading model:', error);
+                    console.error('❌ Error loading model:', error);
+                    console.error('Model path attempted:', modelData.model);
+                    
+                    // Send error to React Native
+                    if (window.ReactNativeWebView) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'model_load_error',
+                            error: `Failed to load ${modelData.title}: ${error.message}`
+                        }));
+                    }
+                    
                     // Create fallback model
                     createFallbackModel();
                 }
@@ -424,6 +522,7 @@
         }
 
         function createFallbackModel() {
+            console.log('Creating fallback model for:', modelData.title);
             const geometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const material = new THREE.MeshPhongMaterial({ color: 0x9C27B0 });
             const model = new THREE.Mesh(geometry, material);
@@ -477,6 +576,23 @@
             document.getElementById('info-description').textContent = modelData.description;
             document.getElementById('info-complexity').textContent = `Complexity: ${modelData.complexity}`;
             document.getElementById('info-usage').textContent = `Usage: ${modelData.usage}`;
+            
+            updateDebugInfo();
+        }
+
+        function updateDebugInfo() {
+            if (debugParam === 'true') {
+                const debugContent = document.getElementById('debug-content');
+                debugContent.innerHTML = `
+                    <strong>Debug Info:</strong><br>
+                    Model Param: ${modelParam || 'none'}<br>
+                    Current Model: ${modelData.title}<br>
+                    Model File: ${modelData.model}<br>
+                    Confidence: ${confidenceParam || 'none'}<br>
+                    WebXR: ${navigator.xr ? '✅' : '❌'}<br>
+                    HTTPS: ${location.protocol === 'https:' ? '✅' : '❌'}
+                `;
+            }
         }
 
         // AR Control Functions
