@@ -4,41 +4,226 @@
     <title>WebXR AR Viewer - Educational Models</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    
     <style>
         body {
             margin: 0;
-            background-color: #000;
+            background: linear-gradient(135deg, #0f2027 0%, #2c5364 100%);
             color: #fff;
-            font-family: Monospace;
+            font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 13px;
             line-height: 24px;
             overscroll-behavior: none;
         }
 
-        #info {
-            position: absolute;
-            top: 10px;
-            width: 100%;
-            text-align: center;
-            z-index: 100;
-            display: block;
+        /* AR Header Styles */
+        .ar-header {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            right: 20px;
             background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 0 10px;
-            box-sizing: border-box;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+            z-index: 4;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.18);
         }
 
+        .ar-title {
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, #00c6fb, #005bea);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .ar-subtitle {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        /* Model Information Panel (Topic Detail) */
+        .model-info-panel {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 280px;
+            max-height: 50vh;
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.9), rgba(30, 30, 30, 0.8));
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            pointer-events: auto;
+            z-index: 4;
+            overflow-y: auto;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .model-info-panel.hidden {
+            transform: translateY(-50%) translateX(-320px);
+            opacity: 0;
+        }
+
+        .info-section {
+            margin-bottom: 15px;
+        }
+
+        .info-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-content {
+            font-size: 14px;
+            line-height: 1.4;
+            opacity: 0.9;
+        }
+
+        .hotspot-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .hotspot-item {
+            background: rgba(255, 255, 255, 0.1);
+            margin: 5px 0;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .hotspot-item:hover {
+            background: rgba(102, 126, 234, 0.2);
+            transform: translateX(5px);
+        }
+
+        /* AR Controls - Horizontal Layout */
+        .ar-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 12px;
+            z-index: 100;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 95vw;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 30px;
+            padding: 10px 18px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+        }
+
+        .ar-button {
+            background: linear-gradient(135deg, #00c6fb 0%, #005bea 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 15px;
+            min-width: 80px;
+            text-align: center;
+            font-weight: 500;
+            transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+            box-shadow: 0 2px 8px rgba(0,198,251,0.10);
+            outline: none;
+        }
+
+        .ar-button:hover {
+            background: linear-gradient(135deg, #005bea 0%, #00c6fb 100%);
+            box-shadow: 0 4px 16px rgba(0,198,251,0.18);
+            transform: translateY(-2px) scale(1.04);
+        }
+
+        .ar-button:active {
+            transform: scale(0.97);
+        }
+
+        /* AR Main Button (modern, vibrant) */
+        .ar-button-main {
+            position: absolute;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 101;
+            background: linear-gradient(135deg, #00c6fb 0%, #005bea 100%);
+            border: none;
+            padding: 18px 38px;
+            border-radius: 30px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            box-shadow: 0 8px 32px rgba(0,198,251,0.18);
+            letter-spacing: 1px;
+            transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+            outline: none;
+        }
+
+        .ar-button-main:hover {
+            background: linear-gradient(135deg, #005bea 0%, #00c6fb 100%);
+            box-shadow: 0 12px 32px rgba(0,198,251,0.22);
+            transform: translateY(-2px) scale(1.04);
+        }
+
+        /* Camera Command Overlay */
+        .ar-camera-command {
+            display: none;
+            position: fixed;
+            left: 50%;
+            top: 80px;
+            transform: translateX(-50%);
+            z-index: 200;
+            background: linear-gradient(135deg, #005bea 0%, #00c6fb 100%);
+            color: #fff;
+            padding: 18px 36px;
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 500;
+            box-shadow: 0 4px 24px rgba(0,198,251,0.18);
+            opacity: 0.97;
+            text-align: center;
+            transition: opacity 0.7s;
+        }
+
+        /* Hide default info panel */
+        #info {
+            display: none !important;
+        }
+
+        /* Hide auto-selected text in subtitle */
+        #model-subtitle {
+            display: none !important;
+        }
+
+        /* Model selector styling */
         #model-selector {
             position: absolute;
-            top: 60px;
+            top: 80px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.7);
             padding: 10px;
-            border-radius: 5px;
+            border-radius: 10px;
             z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,198,251,0.10);
         }
 
         #model-selector select {
@@ -55,203 +240,20 @@
             background: #222;
         }
 
-        /* AR Button positioned higher */
-        .ar-button-main {
-            position: absolute;
-            bottom: 120px !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            z-index: 101 !important;
-            background: linear-gradient(135deg, #4CAF50, #45a049) !important;
-            border: none !important;
-            padding: 12px 24px !important;
-            border-radius: 25px !important;
-            color: white !important;
-            font-size: 16px !important;
-            font-weight: bold !important;
-            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3) !important;
-        }
-
-        /* AR Controls */
-        .ar-controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: none;
-            flex-direction: row;
-            gap: 8px;
-            z-index: 100;
-            flex-wrap: wrap;
-            justify-content: center;
-            max-width: 90%;
-        }
-
-        .ar-controls.active {
-            display: flex;
-        }
-
-        .ar-button {
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            min-width: 60px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .ar-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .ar-button:active {
-            transform: scale(0.95);
-        }
-
-        /* Enhanced Model Info Panel - Half mobile screen size */
-        .model-info {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 50vh;
-            background: rgba(0, 0, 0, 0.9);
-            border-radius: 15px 15px 0 0;
-            z-index: 100;
-            display: none;
-            overflow: hidden;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .model-info.active {
-            display: block;
-            animation: slideUp 0.3s ease;
-        }
-
-        @keyframes slideUp {
-            from {
-                transform: translateY(100%);
-            }
-            to {
-                transform: translateY(0);
-            }
-        }
-
-        .info-header {
-            position: sticky;
-            top: 0;
-            background: rgba(0, 0, 0, 0.95);
-            padding: 15px 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 101;
-        }
-
-        .info-close {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        .info-content {
-            padding: 20px;
-            height: calc(50vh - 80px);
-            overflow-x: auto;
-            overflow-y: auto;
-        }
-
-        .info-section {
-            margin-bottom: 25px;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            border-left: 4px solid #4CAF50;
-        }
-
-        .info-section h4 {
-            margin: 0 0 10px 0;
-            color: #4CAF50;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .info-section p {
-            margin: 8px 0;
-            font-size: 13px;
-            line-height: 1.5;
-        }
-
-        .interactive-item {
-            background: rgba(76, 175, 80, 0.2);
-            padding: 10px;
-            margin: 8px 0;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(76, 175, 80, 0.3);
-        }
-
-        .interactive-item:hover {
-            background: rgba(76, 175, 80, 0.4);
-            transform: translateX(5px);
-        }
-
-        .complexity-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .complexity-item {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 8px;
-            border-radius: 5px;
-            text-align: center;
-            font-size: 12px;
-        }
-
-        .usage-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .usage-tag {
-            background: rgba(76, 175, 80, 0.3);
-            padding: 4px 8px;
-            border-radius: 15px;
-            font-size: 11px;
-            border: 1px solid rgba(76, 175, 80, 0.5);
-        }
-
         /* Instructions */
         .instructions {
             position: absolute;
-            bottom: 180px;
+            bottom: 160px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.7);
             padding: 10px 20px;
-            border-radius: 5px;
+            border-radius: 8px;
             text-align: center;
             z-index: 100;
-            font-size: 12px;
+            font-size: 13px;
             max-width: 80%;
+            box-shadow: 0 2px 8px rgba(0,198,251,0.10);
         }
 
         /* Debug panel */
@@ -271,32 +273,12 @@
         .debug-panel.active {
             display: block;
         }
-
-        /* Scrollbar styling */
-        .info-content::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-
-        .info-content::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-        }
-
-        .info-content::-webkit-scrollbar-thumb {
-            background: rgba(76, 175, 80, 0.6);
-            border-radius: 3px;
-        }
-
-        .info-content::-webkit-scrollbar-thumb:hover {
-            background: rgba(76, 175, 80, 0.8);
-        }
     </style>
 </head>
 <body>
-    <div id="info">
-        <span id="model-title">WebXR AR Educational Viewer</span><br/>
-        <span id="model-subtitle">Select a model and enter AR to place it in your space</span>
+    <!-- AR Header -->
+    <div class="ar-header">
+        <div class="ar-title" id="model-title">WebXR AR Educational Viewer</div>
     </div>
 
     <div id="model-selector">
@@ -314,6 +296,11 @@
         </select>
     </div>
 
+    <!-- AR Camera Command Overlay -->
+    <div class="ar-camera-command" id="ar-camera-command">
+        📷 Point your camera at a flat surface to place the model!
+    </div>
+
     <div class="ar-controls" id="ar-controls">
         <button class="ar-button" onclick="shrinkModel()">🔍 Shrink</button>
         <button class="ar-button" onclick="expandModel()">🔎 Expand</button>
@@ -322,52 +309,30 @@
         <button class="ar-button" onclick="moveRight()">➡️ Move Right</button>
     </div>
 
-    <!-- Enhanced Model Info Panel -->
-    <div class="model-info" id="model-info">
-        <div class="info-header">
-            <h3 id="info-title">Model Information</h3>
-            <button class="info-close" onclick="toggleDetails()">✕ Close</button>
+    <!-- Enhanced Model Info Panel (Topic Detail) -->
+    <div class="model-info-panel hidden" id="model-info">
+        <div class="info-section">
+            <div class="info-title" id="info-title">Model Information</div>
+            <div class="info-content" id="info-description">Select a model to see detailed information.</div>
         </div>
-        <div class="info-content">
-            <div class="info-section">
-                <h4>📖 Description</h4>
-                <p id="info-description">Select a model to see detailed information.</p>
+        <div class="info-section">
+            <div class="info-title">⚡ Complexity Analysis</div>
+            <div class="info-content">
+                <strong>Time:</strong> <span id="time-complexity">-</span><br>
+                <strong>Space:</strong> <span id="space-complexity">-</span><br>
+                <span id="info-complexity"></span>
             </div>
-            
-            <div class="info-section">
-                <h4>⚡ Complexity Analysis</h4>
-                <div class="complexity-grid">
-                    <div class="complexity-item">
-                        <strong>Time</strong><br>
-                        <span id="time-complexity">-</span>
-                    </div>
-                    <div class="complexity-item">
-                        <strong>Space</strong><br>
-                        <span id="space-complexity">-</span>
-                    </div>
-                </div>
-                <p id="info-complexity"></p>
-            </div>
-            
-            <div class="info-section">
-                <h4>🔧 Key Components</h4>
-                <div id="components-list">
-                    <div class="interactive-item">Click to highlight components in the model</div>
-                </div>
-            </div>
-            
-            <div class="info-section">
-                <h4>💡 Real-world Applications</h4>
-                <p id="info-usage"></p>
-                <div class="usage-tags" id="usage-tags"></div>
-            </div>
-            
-            <div class="info-section">
-                <h4>🎯 Interactive Features</h4>
-                <div class="interactive-item" onclick="rotateModel()">🔄 Rotate Model</div>
-                <div class="interactive-item" onclick="resetModel()">🏠 Reset Position</div>
-                <div class="interactive-item" onclick="animateModel()">✨ Animate Model</div>
-            </div>
+        </div>
+        <div class="info-section">
+            <div class="info-title">🔧 Key Components</div>
+            <ul class="hotspot-list" id="components-list">
+                <li class="hotspot-item">Click to highlight components in the model</li>
+            </ul>
+        </div>
+        <div class="info-section">
+            <div class="info-title">💡 Real-world Applications</div>
+            <div class="info-content" id="info-usage"></div>
+            <div class="usage-tags" id="usage-tags"></div>
         </div>
     </div>
 
@@ -387,7 +352,6 @@
             }
         }
     </script>
-
     <script type="module">
         import * as THREE from 'three';
         import { ARButton } from 'three/addons/webxr/ARButton.js';
@@ -868,9 +832,10 @@
             }
         };
 
+        // Toggle Details panel (slide in/out)
         window.toggleDetails = function() {
             const infoPanel = document.getElementById('model-info');
-            infoPanel.classList.toggle('active');
+            infoPanel.classList.toggle('hidden');
         };
 
         window.moveLeft = function() {
@@ -919,6 +884,24 @@
             }
         };
 
+        // Show AR Camera Command on AR session start
+        function showARCameraCommand() {
+            const arCmd = document.getElementById('ar-camera-command');
+            arCmd.style.display = 'block';
+            arCmd.style.opacity = 1;
+            setTimeout(() => {
+                arCmd.style.opacity = 0;
+                setTimeout(() => {
+                    arCmd.style.display = 'none';
+                }, 700);
+            }, 4000);
+        }
+
+        // Show AR Camera Command when AR session starts
+        renderer?.xr?.addEventListener?.('sessionstart', showARCameraCommand);
+
+        // Ensure model-info panel is hidden by default
+        document.getElementById('model-info').classList.add('hidden');
     </script>
 </body>
 </html>
