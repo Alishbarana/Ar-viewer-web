@@ -12,7 +12,7 @@
             font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 13px;
             line-height: 24px;
-            overscroll-behavior: none;
+            overscroll-behavior: none
         }
 
         /* AR Header Styles */
@@ -114,7 +114,7 @@
 
         /* AR Controls - Horizontal Layout */
         .ar-controls {
-            position: absolute;
+            position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
@@ -125,10 +125,10 @@
             flex-wrap: wrap;
             justify-content: center;
             max-width: 95vw;
-            background: rgba(0, 0, 0, 0.25);
-            border-radius: 30px;
-            padding: 10px 18px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+            background: none !important; /* Remove background color */
+            border-radius: 0;
+            padding: 0;
+            box-shadow: none;
         }
 
         .ar-button {
@@ -145,6 +145,7 @@
             transition: all 0.3s cubic-bezier(.25,.8,.25,1);
             box-shadow: 0 2px 8px rgba(0,198,251,0.10);
             outline: none;
+            margin: 0 2px;
         }
 
         .ar-button:hover {
